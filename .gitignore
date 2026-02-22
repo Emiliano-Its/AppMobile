@@ -1,17 +1,16 @@
 # env
 .env
-# Entorno virtual
+
 venv/
 env/
 
-# Archivos de Python
+#  Python
 __pycache__/
 *.py[cod]
 
-# Base de datos (por si alguna vez usas SQLite)
+# db
 *.sqlite3
 
-# Archivos de configuración de VS Code o IDEs
 .vscode/
 .idea/
 bin/
