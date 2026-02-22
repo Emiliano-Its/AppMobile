@@ -17,3 +17,6 @@ bin/
 lib/
 include/
 pyvenv.cfg
+lib64
+lib/python3.13/site-packages
+
