@@ -1,2 +1,16 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
+# env
 .env
+# Entorno virtual
+venv/
+env/
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+
+# Base de datos (por si alguna vez usas SQLite)
+*.sqlite3
+
+# Archivos de configuración de VS Code o IDEs
+.vscode/
+.idea/
