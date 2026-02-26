@@ -5,7 +5,7 @@ from django.conf import settings
 
 
 
-class ProductoFinal(models.Model):
+class FinalProduct(models.Model):
     codigo_barras = models.CharField(max_length=100, unique=True)
     nombre = models.CharField(max_length=100)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
@@ -29,7 +29,7 @@ class Venta(models.Model):
 
 class DetalleVenta(models.Model):
     venta = models.ForeignKey(Venta, related_name='detalles', on_delete=models.CASCADE)
-    producto = models.ForeignKey(ProductoFinal, on_delete=models.PROTECT)
+    producto = models.ForeignKey(FinalProduct, on_delete=models.PROTECT)
     cantidad = models.IntegerField()
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2) # Se guarda por si el precio cambia a futuro
 
