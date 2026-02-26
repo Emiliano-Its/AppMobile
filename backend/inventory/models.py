@@ -4,7 +4,7 @@ from django.db import models
 
 from django.conf import settings
 
-class MateriaPrima(models.Model):
+class RawMaterial(models.Model):
     # Usamos CharField para el código de barras porque puede contener letras o ceros a la izquierda
     codigo_barras = models.CharField(max_length=100, unique=True, verbose_name="Código de Barras")
     nombre = models.CharField(max_length=100)
@@ -22,7 +22,7 @@ class MovimientoInventario(models.Model):
         ('SALIDA', 'Salida (Retiro de producción)'),
     ]
     
-    materia_prima = models.ForeignKey(MateriaPrima, on_delete=models.CASCADE)
+    RawMaterial = models.ForeignKey(RawMaterial, on_delete=models.CASCADE)
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
     cantidad = models.DecimalField(max_digits=10, decimal_places=2)
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT) 
