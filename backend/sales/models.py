@@ -1,8 +1,9 @@
 from django.db import models
+from django.conf import settings
 
 # Create your models here.
 
-from django.contrib.auth.models import User
+
 
 class ProductoFinal(models.Model):
     codigo_barras = models.CharField(max_length=100, unique=True)
@@ -21,7 +22,7 @@ class Venta(models.Model):
     fecha = models.DateTimeField(auto_now_add=True)
     tipo = models.CharField(max_length=10, choices=TIPO_VENTA)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    usuario_vendedor = models.ForeignKey(User, on_delete=models.PROTECT)
+    usuario_vendedor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     
     # Para el cliente (puede ser nulo si es venta rápida en local)
     cliente_nombre = models.CharField(max_length=200, blank=True, null=True)
@@ -34,7 +35,7 @@ class DetalleVenta(models.Model):
 
 class CorteCaja(models.Model):
     fecha = models.DateTimeField(auto_now_add=True)
-    usuario = models.ForeignKey(User, on_delete=models.PROTECT)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     monto_apertura = models.DecimalField(max_digits=10, decimal_places=2)
     monto_cierre_real = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     esta_cerrada = models.BooleanField(default=False)
