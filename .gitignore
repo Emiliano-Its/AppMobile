@@ -1,22 +1,21 @@
-# env
-.env
-
+# 1. Ignorar el entorno virtual de Python (las carpetas específicas)
+/bin/
+/include/
+/lib/
+/lib64
+/pyvenv.cfg
 venv/
 env/
 
-#  Python
-__pycache__/
+# 2. Ignorar archivos temporales de Python (en cualquier subcarpeta)
+**/__pycache__/
 *.py[cod]
 
-# db
+# 3. Ignorar la Base de Datos y Variables de Entorno
 *.sqlite3
+.env
+backend/.env
 
+# 4. Ignorar IDEs
 .vscode/
 .idea/
-bin/
-lib/
-include/
-pyvenv.cfg
-lib64
-lib/python3.13/site-packages
-

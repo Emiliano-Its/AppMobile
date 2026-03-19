@@ -9,4 +9,5 @@ router.register(r'FinalProduct', FinalProductViewSet)
 urlpatterns = [
 
     path('', include(router.urls)),
+    path('api/', include(router.urls))
 ]

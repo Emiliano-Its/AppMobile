@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import FinalProduct, Venta, DetalleVenta, CorteCaja
+from .models import Venta, DetalleVenta, FinalProduct
 
 class FinalProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -7,36 +7,52 @@ class FinalProductSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class SaleDetailSerializer(serializers.ModelSerializer):
-    product_name = serializers.ReadOnlyField(source='producto.nombre')
+    # Usamos producto_nombre para que coincida con lo que Flutter espera
+    producto_nombre = serializers.ReadOnlyField(source='producto.nombre')
 
     class Meta:
         model = DetalleVenta
-        fields = ['id', 'producto', 'product_name', 'cantidad', 'precio_unitario']
+        # 'producto' es el ID para el POST, 'producto_nombre' es para el GET en Flutter
+        fields = ['id', 'producto', 'producto_nombre', 'cantidad', 'precio_unitario']
 
 class SaleSerializer(serializers.ModelSerializer):
-    # Usamos 'detalles' como source porque es el related_name en tu modelo
+    # 'details' mapea a 'detalles' en el modelo por el related_name
     details = SaleDetailSerializer(many=True, source='detalles', required=False)
-    seller_name = serializers.ReadOnlyField(source='usuario_vendedor.username')
-
+    seller_name = serializers.ReadOnlyField(source='usuario_vendedor.username', default="Cliente App")
+    
     class Meta:
         model = Venta
-        fields = ['id', 'fecha', 'tipo', 'total', 'usuario_vendedor', 'seller_name', 'cliente_nombre', 'details']
+        fields = [
+            'id', 
+            'fecha', 
+            'tipo', 
+            'total', 
+            'usuario_vendedor', 
+            'seller_name', 
+            'cliente_nombre', 
+            'direccion_envio',           # <--- AGREGADO
+            'fecha_entrega_estimada',     # <--- AGREGADO
+            'estado', 
+            'details'
+        ]
+        # Hacemos el vendedor opcional en la validación del Serializer
+        extra_kwargs = {
+            'usuario_vendedor': {'required': False, 'allow_null': True}
+        }
 
     def create(self, validated_data):
-        # 1. EXTRAER los detalles de validated_data para que no choquen con el .create()
-        # Si no los quitamos, Django intenta asignarlos directamente y lanza el TypeError
+        # 1. Extraer los detalles (usamos 'detalles' porque es el source)
         details_data = validated_data.pop('detalles', [])
         
-        # 2. Ahora validated_data solo tiene campos directos de la Venta
+        # 2. Crear la venta (direccion_envio y fecha_entrega_estimada ya vienen en validated_data)
         sale = Venta.objects.create(**validated_data)
         
-        # 3. Iteramos sobre los detalles extraídos
+        # 3. Crear detalles
         for detail in details_data:
             product = detail.get('producto')
             qty = detail.get('cantidad')
             price = detail.get('precio_unitario')
 
-            # Creamos el detalle asociado a la venta
             DetalleVenta.objects.create(
                 venta=sale,
                 producto=product,
@@ -44,7 +60,8 @@ class SaleSerializer(serializers.ModelSerializer):
                 precio_unitario=price
             )
             
-            # Lógica de descuento de stock solo si es venta LOCAL
+            # Descontar del inventario solo si es venta LOCAL o si decides 
+            # descontarlo al aceptar el pedido después.
             if sale.tipo == 'LOCAL':
                 product.stock_actual -= int(qty)
                 product.save()
