@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../main.dart'; // AppColors
+import '../main.dart'; 
+import '../api_config.dart'; // Importación agregada para centralizar la IP
 
 class CustomerCartScreen extends StatefulWidget {
   final Map<int, int> cart;
@@ -26,10 +27,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
   @override
   void initState() {
     super.initState();
-    // Forzamos que inicie vacío explícitamente
     _direccionController.text = ""; 
-    // Si en un futuro quieres volver a cargar la dirección guardada,
-    // solo tendrías que llamar a _loadUserAddress() aquí.
   }
 
   double _calculateTotal() {
@@ -88,6 +86,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     });
   }
 
+  // --- FUNCIÓN DE CONFIRMACIÓN CORREGIDA ---
   Future<void> _confirmOrder() async {
     if (_direccionController.text.trim().isEmpty) {
       _showSnackBar("Por favor, ingresa una dirección de envío");
@@ -123,9 +122,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     };
 
     try {
+      // CAMBIO: Usamos ApiConfig.sales y ApiConfig.headers
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/api/sales/'),
-        headers: {"Content-Type": "application/json"},
+        Uri.parse(ApiConfig.sales),
+        headers: ApiConfig.headers,
         body: jsonEncode(orderData),
       );
 
@@ -133,10 +133,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
         if (!mounted) return;
         _showSuccessDialog();
       } else {
-         _showSnackBar("Error al enviar el pedido.");
+         _showSnackBar("Error al enviar el pedido: ${response.body}");
       }
     } catch (e) {
-      _showSnackBar("Error de conexión.");
+      _showSnackBar("Error de conexión con el servidor Debian.");
     } finally {
       if(mounted) setState(() => _isSubmitting = false);
     }
@@ -145,6 +145,8 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
   void _showSnackBar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
+
+  // ... (El resto del código de la interfaz UI se mantiene igual) ...
 
   @override
   Widget build(BuildContext context) {
@@ -311,7 +313,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                 elevation: 0,
               ),
               child: _isSubmitting 
-                ? const CircularProgressIndicator(color: Colors.white)
+                ? const SizedBox(
+                    width: 24, height: 24,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                  )
                 : const Text("CONFIRMAR Y ENVIAR PEDIDO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
             ),
           ),

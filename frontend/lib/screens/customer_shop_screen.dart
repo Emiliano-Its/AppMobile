@@ -3,9 +3,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; 
+import '../api_config.dart'; // Importación esencial
 import './customer_pedidos.dart'; 
 import './customer_cart_screen.dart';
-import './admin_home.dart'; // Importante para la navegación de admin
+import './admin_home.dart'; 
 
 class CustomerShopScreen extends StatefulWidget {
   const CustomerShopScreen({super.key});
@@ -20,9 +21,10 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   Map<int, int> _cart = {}; 
   bool _isLoading = true;
   String _userName = "Cliente";
-  bool _isAdmin = false; // Variable para controlar la visibilidad del panel admin
+  bool _isAdmin = false; 
 
-  final String _productsUrl = 'http://10.0.2.2:8000/api/FinalProduct/';
+  // --- CAMBIO 1: Dirección dinámica desde ApiConfig ---
+  final String _productsUrl = ApiConfig.products;
 
   @override
   void initState() {
@@ -36,24 +38,34 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     final String rol = prefs.getString('user_rol') ?? "";
     setState(() {
       _userName = prefs.getString('username') ?? "Cliente";
-      // Verificamos si el usuario tiene permisos de administrador
       _isAdmin = (rol == 'ADMIN' || rol == 'STAFF');
     });
   }
 
   Future<void> _fetchProducts() async {
     try {
-      final response = await http.get(Uri.parse(_productsUrl));
+      // --- CAMBIO 2: Petición usando URL y Cabeceras centralizadas ---
+      final response = await http.get(
+        Uri.parse(_productsUrl),
+        headers: ApiConfig.headers,
+      );
+      
       if (response.statusCode == 200) {
         List<dynamic> data = json.decode(response.body);
         setState(() {
-          _allProducts = data.where((p) => p['stock_actual'] > 0 && p['activo'] == true).toList();
+          // Solo mostramos productos activos y con stock
+          _allProducts = data.where((p) => 
+            (p['stock_actual'] ?? 0) > 0 && p['activo'] == true
+          ).toList();
           _filteredProducts = _allProducts;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint("Error al obtener productos: $e");
+      debugPrint("Error al obtener productos de Debian: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -65,6 +77,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     });
   }
 
+  // ... (Lógica de carrito se mantiene igual) ...
   void _addToCart(int id) => setState(() => _cart[id] = (_cart[id] ?? 0) + 1);
   
   void _removeFromCart(int id) {
@@ -97,7 +110,6 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         ),
       ),
     );
-    // Al volver, podrías limpiar el carrito si el pedido fue exitoso
   }
 
   @override
@@ -105,7 +117,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       appBar: AppBar(
-        title: const Text("Tostadería el Molino", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text("Tostadería el Molino", 
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: AppColors.verdeBosque,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
@@ -113,7 +126,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           _buildCartBadge(),
         ],
       ),
-      drawer: _buildDrawer(), // Aquí implementamos la lógica de roles
+      drawer: _buildDrawer(), 
       body: Column(
         children: [
           _buildSearchBar(),
@@ -130,6 +143,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   Widget _buildDrawer() {
     return Drawer(
+      backgroundColor: AppColors.fondoHueso,
       child: Column(
         children: [
           UserAccountsDrawerHeader(
@@ -139,17 +153,16 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
               child: Icon(Icons.person, size: 40, color: AppColors.verdeBosque),
             ),
             accountName: Text(_userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            accountEmail: Text(_isAdmin ? "Administrador del Sistema" : "Cliente Comprador"),
+            accountEmail: Text(_isAdmin ? "Panel de Administrador" : "Cliente"),
           ),
           
-          // --- OPCIÓN SOLO PARA ADMIN ---
           if (_isAdmin) ...[
             ListTile(
               leading: const Icon(Icons.admin_panel_settings, color: Colors.orange),
-              title: const Text("Panel de Inventario", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-              subtitle: const Text("Regresar a gestión de productos"),
+              title: const Text("Gestión de Inventario", 
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
               onTap: () {
-                Navigator.pop(context); // Cierra el Drawer
+                Navigator.pop(context);
                 Navigator.pushReplacement(
                   context, 
                   MaterialPageRoute(builder: (context) => const AdminInventoryHub())
@@ -161,12 +174,12 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
           ListTile(
             leading: const Icon(Icons.shop_two, color: AppColors.verdeBosque),
-            title: const Text("Tienda"),
+            title: const Text("Tienda de Tostadas"),
             onTap: () => Navigator.pop(context),
           ),
           ListTile(
             leading: const Icon(Icons.assignment, color: AppColors.verdeBosque),
-            title: const Text("Mis Pedidos"),
+            title: const Text("Estado de mis Pedidos"),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -175,12 +188,13 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
               );
             },
           ),
-          const Spacer(), // Empuja el cierre de sesión al fondo
+          const Spacer(),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
             title: const Text("Cerrar Sesión"),
             onTap: () {
+              // Limpiar sesión si es necesario antes de salir
               Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
             },
           ),
@@ -191,7 +205,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   }
 
   Widget _buildCartBadge() {
-    return InkWell( // Hecho clickeable para navegar al carrito
+    return InkWell(
       onTap: _cart.isNotEmpty ? _navigateToCart : null,
       child: Padding(
         padding: const EdgeInsets.only(right: 15, top: 5),
@@ -206,7 +220,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                  child: Text("${_totalItems()}", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  child: Text("${_totalItems()}", 
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
               ),
           ],
@@ -222,7 +237,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
       child: TextField(
         onChanged: _filterSearch,
         decoration: InputDecoration(
-          hintText: "¿Qué tostadas buscamos hoy?",
+          hintText: "¿Qué se te antoja hoy?",
           prefixIcon: const Icon(Icons.search, color: AppColors.verdeBosque),
           filled: true,
           fillColor: Colors.white,
@@ -235,7 +250,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   Widget _buildProductGrid() {
     if (_filteredProducts.isEmpty) {
-      return const Center(child: Text("No se encontraron productos disponibles."));
+      return const Center(child: Text("No hay tostadas disponibles por ahora."));
     }
     return GridView.builder(
       padding: const EdgeInsets.all(15),
@@ -274,16 +289,21 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(product['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(product['nombre'], 
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), 
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
-                    Text("\$${product['precio_venta']}", style: const TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text("\$${product['precio_venta']}", 
+                      style: const TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 8),
                     qty == 0
                         ? SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
                               onPressed: () => _addToCart(product['id']),
-                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.verdeBosque, shape: const StadiumBorder(), elevation: 0),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.verdeBosque, 
+                                shape: const StadiumBorder(), elevation: 0),
                               child: const Text("Agregar", style: TextStyle(color: Colors.white, fontSize: 12)),
                             ),
                           )
@@ -332,8 +352,9 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text("Total estimado", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              Text("\$${_calculateTotal().toStringAsFixed(2)}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)),
+              const Text("Total de tu pedido", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              Text("\$${_calculateTotal().toStringAsFixed(2)}", 
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)),
             ],
           ),
           const Spacer(),
@@ -344,7 +365,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             ),
             onPressed: _navigateToCart, 
-            child: const Text("VER CARRITO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text("VER MI CARRITO", 
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

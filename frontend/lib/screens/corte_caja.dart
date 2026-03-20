@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import '../main.dart'; 
+import '../api_config.dart'; // Importación vital agregada
 
 class CorteCajaScreen extends StatefulWidget {
   const CorteCajaScreen({super.key});
@@ -17,12 +18,12 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
   bool _isLoading = false;
   DateTime _selectedDate = DateTime.now();
 
-  final String _baseSalesUrl = 'http://10.0.2.2:8000/api/sales/';
+  // --- CAMBIO 1: Usamos la constante de ApiConfig ---
+  final String _baseSalesUrl = ApiConfig.sales;
 
   @override
   void initState() {
     super.initState();
-    // Usamos es_MX para ser consistentes con el main
     initializeDateFormatting('es_MX', null); 
     _fetchSales();
   }
@@ -30,6 +31,7 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
   Future<void> _fetchSales() async {
     setState(() => _isLoading = true);
     try {
+      // --- CAMBIO 2: Petición limpia usando la URL centralizada ---
       final response = await http.get(Uri.parse(_baseSalesUrl));
       if (response.statusCode == 200) {
         setState(() {
@@ -37,12 +39,13 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
         });
       }
     } catch (e) {
-      _showSnackBar("Error al conectar con el servidor", Colors.red);
+      _showSnackBar("Error al conectar con el servidor Debian", Colors.red);
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
+  // ... (El resto de la lógica de filtrado y cálculo se mantiene igual) ...
   List<dynamic> get _filteredSales {
     return _allSales.where((sale) {
       DateTime saleDate = DateTime.parse(sale['fecha']);
@@ -74,7 +77,7 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_month),
+            icon: const Icon(Icons.calendar_month, color: Colors.white),
             onPressed: () => _selectDate(context),
           )
         ],
@@ -197,14 +200,14 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2024),
       lastDate: DateTime.now(),
-      locale: const Locale('es', 'MX'), // Cambiado a MX para que coincida con el main
+      locale: const Locale('es', 'MX'), 
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.verdeBosque, // Cabezal del calendario
-              onPrimary: Colors.white, // Texto en el cabezal
-              onSurface: AppColors.tituloNegro, // Días del mes
+              primary: AppColors.verdeBosque, 
+              onPrimary: Colors.white, 
+              onSurface: AppColors.tituloNegro, 
             ),
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(foregroundColor: AppColors.verdeBosque),

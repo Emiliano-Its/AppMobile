@@ -3,7 +3,12 @@ from django.conf import settings
 from django.db.models import Sum
 
 class FinalProduct(models.Model):
-    codigo_barras = models.CharField(max_length=100, unique=True)
+    codigo_barras = models.CharField(
+    max_length=100, 
+    unique=True, 
+    null=True,   # Permite que sea nulo en la base de datos
+    blank=True   # Permite que el formulario lo acepte vacío
+    )       
     nombre = models.CharField(max_length=100)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
     stock_actual = models.IntegerField(default=0)

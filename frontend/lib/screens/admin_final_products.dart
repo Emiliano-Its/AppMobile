@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../main.dart'; 
+import '../api_config.dart'; 
 
 class FinalProductsScreen extends StatefulWidget {
   const FinalProductsScreen({super.key});
@@ -15,7 +17,8 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
   List<dynamic> _filteredProducts = []; 
   bool _isLoading = true;
 
-  final String apiUrl = 'http://10.0.2.2:8000/api/FinalProduct/';
+  // --- CORRECCIÓN 1: Usamos la constante centralizada ---
+  final String apiUrl = ApiConfig.products;
 
   @override
   void initState() {
@@ -23,10 +26,239 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
     _fetchProductos();
   }
 
-  // --- 1. OBTENER PRODUCTOS (GET) ---
+  // --- ESCANEAR PARA SUMAR (CORREGIDO CON FILTRO DE ESTABILIDAD) ---
+Future<void> _abrirEscanerParaSumar() async {
+  // 1. Configuramos el controlador con máxima precisión
+  final MobileScannerController scannerController = MobileScannerController(
+    formats: [BarcodeFormat.ean13, BarcodeFormat.ean8], // ÚNICOS formatos permitidos
+    detectionSpeed: DetectionSpeed.normal, // 'normal' es más preciso que 'noDuplicates' para evitar basura
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
+
+  final String? codigoDetectado = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => Scaffold(
+        appBar: AppBar(
+          title: const Text("Escaneando Producto", style: TextStyle(color: Colors.white)),
+          backgroundColor: AppColors.verdeBosque,
+        ),
+        body: Stack(
+          children: [
+            MobileScanner(
+              controller: scannerController,
+              onDetect: (capture) {
+                final List<Barcode> barcodes = capture.barcodes;
+                for (final barcode in barcodes) {
+                  final String? rawValue = barcode.rawValue;
+                  
+                  // 2. FILTRO ESTRICTO: Solo aceptamos si tiene 13 dígitos (como tu imagen)
+                  // o 8 dígitos (EAN-8). Cualquier otra cosa se ignora.
+                  if (rawValue != null && (rawValue.length == 13 || rawValue.length == 8)) {
+                    
+                    // Verificamos que sean solo números para evitar errores de interpretación
+                    if (RegExp(r'^[0-9]+$').hasMatch(rawValue)) {
+                      debugPrint("¡Código Válido Detectado!: $rawValue");
+                      
+                      // Cerramos y liberamos recursos
+                      scannerController.dispose();
+                      Navigator.pop(context, rawValue);
+                      break; // Salimos del bucle
+                    }
+                  }
+                }
+              },
+            ),
+            // Guía visual: El recuadro ayuda a que el usuario no mueva tanto el cel
+            Center(
+              child: Container(
+                width: 280,
+                height: 150,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.greenAccent, width: 3),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+            ),
+            const Positioned(
+              bottom: 80,
+              left: 0,
+              right: 0,
+              child: Text(
+                "Enfoca el código de barras dentro del rectangulo",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white, 
+                  backgroundColor: Colors.black87,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  // Limpieza por si el usuario regresa con el botón de "atrás"
+  scannerController.dispose();
+
+  if (codigoDetectado != null) {
+    _buscarYSumarStock(codigoDetectado);
+  }
+}
+  // --- CORRECCIÓN 2: Búsqueda usando ApiConfig.searchByCode ---
+Future<void> _buscarYSumarStock(String codigo) async {
+  try {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.searchByCode}?codigo=$codigo'),
+      headers: ApiConfig.headers
+    );
+
+    if (response.statusCode == 200) {
+      // SI EXISTE: Directo a sumar stock
+      final producto = json.decode(response.body);
+      _mostrarDialogoSuma(producto);
+    } else {
+      // SI NO EXISTE: Preguntamos antes de abrir el formulario
+      _mostrarDialogoConfirmarRegistro(codigo);
+    }
+  } catch (e) {
+    _showSnackBar("Error de conexión con el servidor", Colors.red);
+  }
+}
+
+// NUEVO: Diálogo de interrupción para preguntar al usuario
+void _mostrarDialogoConfirmarRegistro(String codigo) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          const Icon(Icons.inventory_2_outlined, color: Colors.orange, size: 28),
+          const SizedBox(width: 12),
+          // Usamos Flexible para que el título no cause overflow si es largo
+          Flexible(
+            child: Text(
+              "Producto Nuevo",
+              style: TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+      // --- LA SOLUCIÓN AL OVERFLOW ESTÁ AQUÍ ---
+      content: SingleChildScrollView( 
+        child: Column(
+          mainAxisSize: MainAxisSize.min, // Importante para diálogos
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Este producto no existe en la base de datos:",
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                codigo,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold, 
+                  fontSize: 18, 
+                  letterSpacing: 1.5,
+                  color: Colors.black87
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            const Text("¿Deseas registrarlo ahora para gestionar su stock?"),
+          ],
+        ),
+      ),
+      actionsPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("CANCELAR", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.verdeBosque,
+            shape: const StadiumBorder(),
+            elevation: 2,
+          ),
+          onPressed: () {
+            Navigator.pop(context);
+            _showFormDialog(nuevoCodigoEscanedado: codigo);
+          },
+          child: const Text("SÍ, REGISTRAR", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
+}
+
+  void _mostrarDialogoSuma(dynamic producto) {
+    final cantidadCtrl = TextEditingController(text: "1");
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Sumar stock: ${producto['nombre']}"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text("Stock actual: ${producto['stock_actual']}"),
+            const SizedBox(height: 15),
+            TextField(
+              controller: cantidadCtrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: "Cantidad a agregar",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCELAR")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.verdeBosque),
+            onPressed: () {
+              int cantidadASumar = int.tryParse(cantidadCtrl.text) ?? 0;
+              int stockAnterior = int.parse(producto['stock_actual'].toString());
+              int nuevoStockTotal = stockAnterior + cantidadASumar;
+              
+              Navigator.pop(context);
+
+              _saveProduct(
+                producto['nombre'],
+                producto['codigo_barras'],
+                producto['precio_venta'].toString(),
+                nuevoStockTotal.toString(),
+                true,
+                id: producto['id']
+              );
+            },
+            child: const Text("SUMAR", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- OBTENER PRODUCTOS ---
   Future<void> _fetchProductos() async {
     try {
-      final response = await http.get(Uri.parse(apiUrl));
+      final response = await http.get(Uri.parse(apiUrl), headers: ApiConfig.headers);
       if (response.statusCode == 200) {
         setState(() {
           _allProducts = json.decode(response.body);
@@ -36,11 +268,10 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
       }
     } catch (e) {
       debugPrint("Error cargando productos: $e");
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- 2. FILTRAR PRODUCTOS ---
   void _filterProducts(String query) {
     setState(() {
       _filteredProducts = _allProducts
@@ -50,7 +281,7 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
     });
   }
 
-  // --- 3. GUARDAR O ACTUALIZAR (POST / PUT) ---
+  // --- CORRECCIÓN 3: Guardar con Headers y URL corregida ---
   Future<void> _saveProduct(String name, String code, String price, String stock, bool isEditing, {int? id}) async {
     final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
     
@@ -59,31 +290,31 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
       "codigo_barras": code,
       "precio_venta": price,
       "stock_actual": int.parse(stock),
-      // Mantenemos el estado activo actual al editar
     };
 
     try {
       final response = isEditing 
-          ? await http.put(url, headers: {"Content-Type": "application/json"}, body: jsonEncode(data))
-          : await http.post(url, headers: {"Content-Type": "application/json"}, body: jsonEncode(data));
+          ? await http.put(url, headers: ApiConfig.headers, body: jsonEncode(data))
+          : await http.post(url, headers: ApiConfig.headers, body: jsonEncode(data));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        if (mounted) Navigator.pop(context); 
         _fetchProductos(); 
-        _showSnackBar("¡Producto guardado!", Colors.green);
+        _showSnackBar("¡Inventario actualizado con éxito!", Colors.green);
       } else {
-        _showSnackBar("Error: ${response.body}", Colors.red);
+        _showSnackBar("Error al guardar: ${response.body}", Colors.red);
       }
     } catch (e) {
-      debugPrint("Error de red: $e");
+      _showSnackBar("Error de red al conectar con Debian", Colors.red);
     }
   }
 
-  // --- 4. TOGGLE ACTIVO (BORRADO LÓGICO) ---
+  // --- TOGGLE ACTIVO ---
   Future<void> _toggleProductStatus(int id) async {
     try {
-      // Llamamos a la acción personalizada que creamos en Django
-      final response = await http.post(Uri.parse('$apiUrl$id/toggle_active/'));
+      final response = await http.post(
+        Uri.parse('$apiUrl$id/toggle_active/'),
+        headers: ApiConfig.headers
+      );
       if (response.statusCode == 200) {
         _fetchProductos();
         _showSnackBar("Estado del producto actualizado", AppColors.verdeBosque);
@@ -93,23 +324,25 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
     }
   }
 
-  // --- 5. ELIMINAR PERMANENTE (DELETE) ---
+  // --- ELIMINAR PERMANENTE ---
   Future<void> _deleteProduct(int id) async {
     try {
-      final response = await http.delete(Uri.parse('$apiUrl$id/'));
+      final response = await http.delete(
+        Uri.parse('$apiUrl$id/'),
+        headers: ApiConfig.headers
+      );
       if (response.statusCode == 204) {
         _fetchProductos();
         _showSnackBar("Producto eliminado permanentemente", Colors.orange);
       } else {
-        // Aquí capturamos el ProtectedError de Django
-        _showSnackBar("No se puede borrar: El producto tiene ventas asociadas. Desactívalo en su lugar.", Colors.red);
+        _showSnackBar("No se puede borrar: Registro protegido.", Colors.red);
       }
     } catch (e) {
       debugPrint("Error: $e");
     }
   }
 
-  // --- UTILIDADES DE UI ---
+  // --- UI SNACKBAR Y DIÁLOGOS ---
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(backgroundColor: color, content: Text(message), duration: const Duration(seconds: 3)),
@@ -122,7 +355,7 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Eliminar Producto"),
-        content: Text("¿Qué deseas hacer con '$name'?\n\n'Borrar' eliminará todo rastro. 'Desactivar' lo ocultará de los clientes pero mantendrá tus registros."),
+        content: Text("¿Deseas eliminar '$name'? Esta acción es irreversible."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCELAR")),
           TextButton(
@@ -130,7 +363,7 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
               Navigator.pop(context);
               _deleteProduct(id);
             }, 
-            child: const Text("BORRAR", style: TextStyle(color: Colors.red))
+            child: const Text("ELIMINAR", style: TextStyle(color: Colors.red))
           ),
         ],
       ),
@@ -142,9 +375,18 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       appBar: AppBar(
-        title: const Text("Inventario Final", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Inventario Final", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: AppColors.verdeBosque,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 28),
+            onPressed: _abrirEscanerParaSumar,
+            tooltip: "Escanear para sumar stock",
+          ),
+          const SizedBox(width: 10),
+        ],
       ),
       body: Column(
         children: [
@@ -155,7 +397,7 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
               : RefreshIndicator(
                   onRefresh: _fetchProductos,
                   child: _filteredProducts.isEmpty 
-                    ? const Center(child: Text("No hay productos"))
+                    ? const Center(child: Text("No hay productos registrados"))
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                         itemCount: _filteredProducts.length,
@@ -181,8 +423,9 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
       color: AppColors.verdeBosque,
       child: TextField(
         onChanged: _filterProducts,
+        style: const TextStyle(color: Colors.black),
         decoration: InputDecoration(
-          hintText: "Buscar por nombre o código...",
+          hintText: "Nombre o código...",
           prefixIcon: const Icon(Icons.search, color: AppColors.verdeBosque),
           filled: true,
           fillColor: Colors.white,
@@ -195,7 +438,6 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
 
   Widget _buildProductCard(dynamic item) {
     bool estaActivo = item['activo'] ?? true;
-
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -210,25 +452,16 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
               color: estaActivo ? AppColors.verdeBosque : Colors.grey
             ),
           ),
-          title: Text(
-            item['nombre'], 
-            style: TextStyle(
-              fontWeight: FontWeight.bold, 
-              decoration: estaActivo ? TextDecoration.none : TextDecoration.lineThrough
-            )
-          ),
+          title: Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text("Stock: ${item['stock_actual']} | \$${item['precio_venta']}"),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Botón para Activar/Desactivar
               IconButton(
                 icon: Icon(estaActivo ? Icons.check_circle : Icons.pause_circle_outline, 
                 color: estaActivo ? Colors.green : Colors.orange),
                 onPressed: () => _toggleProductStatus(item['id']),
-                tooltip: "Pausar/Activar",
               ),
-              // Botón para Borrar
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                 onPressed: () => _confirmDelete(item['id'], item['nombre']),
@@ -241,76 +474,88 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
     );
   }
 
-  // --- Los métodos _showFormDialog y _buildInput se mantienen iguales ---
-  void _showFormDialog({dynamic producto}) {
-    final bool isEditing = producto != null;
-    final nombreCtrl = TextEditingController(text: isEditing ? producto['nombre'] : '');
-    final codigoCtrl = TextEditingController(text: isEditing ? producto['codigo_barras'] : '');
-    final precioCtrl = TextEditingController(text: isEditing ? producto['precio_venta'].toString() : '');
-    final stockCtrl = TextEditingController(text: isEditing ? producto['stock_actual'].toString() : '');
+ // Añadimos el parámetro opcional 'nuevoCodigoEscanedado'
+void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
+  final bool isEditing = producto != null;
+  
+  final nombreCtrl = TextEditingController(text: isEditing ? producto['nombre'] : '');
+  
+  // LÓGICA DE CÓDIGO: 
+  // 1. Si editamos, usa el del producto. 
+  // 2. Si es nuevo pero viene del escáner, usa ese. 
+  // 3. Si es nuevo manual, vacío.
+  final codigoCtrl = TextEditingController(
+    text: isEditing 
+        ? producto['codigo_barras'] 
+        : (nuevoCodigoEscanedado ?? '')
+  );
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.fondoHueso,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20, 
-          left: 25, right: 25, top: 25
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isEditing ? "Editar Producto" : "Nuevo Producto Final", 
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)
-            ),
-            const SizedBox(height: 20),
-            _buildInput("Nombre del Producto", nombreCtrl),
-            _buildInput("Código de Barras", codigoCtrl),
-            Row(
-              children: [
-                Expanded(child: _buildInput("Precio", precioCtrl, isNumber: true)),
-                const SizedBox(width: 15),
-                Expanded(child: _buildInput("Stock actual", stockCtrl, isNumber: true)),
-              ],
-            ),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.verdeBosque, 
-                  shape: const StadiumBorder()
-                ),
-                onPressed: () {
-                  if (nombreCtrl.text.isNotEmpty && precioCtrl.text.isNotEmpty) {
-                    _saveProduct(
-                      nombreCtrl.text,
-                      codigoCtrl.text,
-                      precioCtrl.text,
-                      stockCtrl.text,
-                      isEditing,
-                      id: isEditing ? producto['id'] : null,
-                    );
-                  } else {
-                    _showSnackBar("Nombre y Precio son obligatorios", Colors.red);
-                  }
-                },
-                child: Text(
-                  isEditing ? "ACTUALIZAR" : "GUARDAR PRODUCTO", 
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                ),
+  final precioCtrl = TextEditingController(text: isEditing ? producto['precio_venta'].toString() : '');
+  final stockCtrl = TextEditingController(text: isEditing ? producto['stock_actual'].toString() : '');
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.fondoHueso,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20, 
+        left: 25, right: 25, top: 25
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isEditing ? "Editar Producto" : "Nuevo Producto (Escaneado)", 
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)
+          ),
+          const SizedBox(height: 20),
+          _buildInput("Nombre del producto", nombreCtrl),
+          _buildInput("Código de Barras", codigoCtrl), // Ya vendrá lleno si falló la búsqueda
+          Row(
+            children: [
+              Expanded(child: _buildInput("Precio", precioCtrl, isNumber: true)),
+              const SizedBox(width: 15),
+              Expanded(child: _buildInput("Stock Inicial", stockCtrl, isNumber: true)),
+            ],
+          ),
+          const SizedBox(height: 30),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.verdeBosque, 
+                shape: const StadiumBorder()
+              ),
+              onPressed: () {
+                if (nombreCtrl.text.isNotEmpty && precioCtrl.text.isNotEmpty) {
+                  _saveProduct(
+                    nombreCtrl.text,
+                    codigoCtrl.text,
+                    precioCtrl.text,
+                    stockCtrl.text,
+                    isEditing,
+                    id: isEditing ? producto['id'] : null,
+                  );
+                  Navigator.pop(context);
+                } else {
+                  _showSnackBar("El nombre y precio son obligatorios", Colors.red);
+                }
+              },
+              child: Text(
+                isEditing ? "ACTUALIZAR" : "REGISTRAR NUEVO PRODUCTO", 
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildInput(String label, TextEditingController ctrl, {bool isNumber = false}) {
     return Padding(

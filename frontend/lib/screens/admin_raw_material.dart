@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../main.dart'; // Asegúrate de que aquí estén tus AppColors
+import '../main.dart'; 
+import '../api_config.dart'; // Importación agregada
 
 class RawMaterialScreen extends StatefulWidget {
   const RawMaterialScreen({super.key});
@@ -14,8 +15,8 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
   List<dynamic> insumos = [];
   bool _isLoading = true;
 
-  // URL exacta de tu endpoint en Django
-  final String apiUrl = 'http://10.0.2.2:8000/api/raw-materials/';
+  // --- CAMBIO 1: Usamos la constante centralizada ---
+  final String apiUrl = ApiConfig.rawMaterials;
 
   @override
   void initState() {
@@ -51,7 +52,6 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
   }) async {
     final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
 
-    // El cuerpo del JSON debe coincidir con los nombres en Django
     final Map<String, dynamic> data = {
       "nombre": name,
       "codigo_barras": code,
@@ -61,18 +61,18 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
     };
 
     try {
+      // --- CAMBIO 2: Usamos ApiConfig.headers para el Content-Type ---
       final response = isEditing
-          ? await http.put(url, headers: {"Content-Type": "application/json"}, body: jsonEncode(data))
-          : await http.post(url, headers: {"Content-Type": "application/json"}, body: jsonEncode(data));
+          ? await http.put(url, headers: ApiConfig.headers, body: jsonEncode(data))
+          : await http.post(url, headers: ApiConfig.headers, body: jsonEncode(data));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        if (mounted) Navigator.pop(context); // Cerrar BottomSheet
-        _fetchInsumos(); // Recargar lista
+        if (mounted) Navigator.pop(context); 
+        _fetchInsumos(); 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(backgroundColor: Colors.green, content: Text("¡Insumo guardado con éxito!")),
         );
       } else {
-        // Imprime el error de Django para saber qué campo falló
         debugPrint("Error de Django (400): ${response.body}");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(backgroundColor: Colors.red, content: Text("Error: ${response.body}")),
@@ -88,22 +88,25 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       appBar: AppBar(
-        title: const Text("Gestión de Materia Prima", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Gestión de Materia Prima", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: AppColors.verdeBosque,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.verdeBosque))
           : RefreshIndicator(
               onRefresh: _fetchInsumos,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(15),
-                itemCount: insumos.length,
-                itemBuilder: (context, index) {
-                  final item = insumos[index];
-                  return _buildInsumoCard(item);
-                },
-              ),
+              child: insumos.isEmpty 
+                ? const Center(child: Text("No hay insumos registrados"))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(15),
+                    itemCount: insumos.length,
+                    itemBuilder: (context, index) {
+                      final item = insumos[index];
+                      return _buildInsumoCard(item);
+                    },
+                  ),
             ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.verdeBosque,
@@ -127,9 +130,11 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
         subtitle: Text("Stock: ${item['stock_actual']} ${item['unidad_medida']}\nCódigo: ${item['codigo_barras']}"),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text("\$${item['precio_ultimo_ingreso']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.verdeBosque)),
-            const Text("u", style: TextStyle(fontSize: 10, color: Colors.grey)),
+            Text("\$${item['precio_ultimo_ingreso']}", 
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.verdeBosque)),
+            const Text("por unidad", style: TextStyle(fontSize: 10, color: Colors.grey)),
           ],
         ),
         onTap: () => _showFormInsumo(insumo: item),
@@ -193,6 +198,10 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
                       price: precioCtrl.text,
                       isEditing: isEditing,
                       id: isEditing ? insumo['id'] : null,
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Nombre y Código son obligatorios")),
                     );
                   }
                 },

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../main.dart'; // Asegúrate de que AppColors esté definido aquí
+import '../main.dart'; 
+import '../api_config.dart'; 
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class LocalSalesScreen extends StatefulWidget {
   const LocalSalesScreen({super.key});
@@ -12,13 +14,13 @@ class LocalSalesScreen extends StatefulWidget {
 
 class _LocalSalesScreenState extends State<LocalSalesScreen> {
   List<dynamic> _products = [];
-  Map<int, int> _cart = {}; // ID del producto -> Cantidad
+  Map<int, int> _cart = {}; 
   bool _isLoading = false;
   String _searchQuery = "";
 
-  // Ajusta estas URLs según tu IP local o servidor
-  final String _productsUrl = 'http://10.0.2.2:8000/api/FinalProduct/';
-  final String _salesUrl = 'http://10.0.2.2:8000/api/sales/';
+  // --- CAMBIO 1: Usamos las rutas dinámicas de ApiConfig ---
+  final String _productsUrl = ApiConfig.products;
+  final String _salesUrl = ApiConfig.sales;
 
   @override
   void initState() {
@@ -29,7 +31,12 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
   Future<void> _fetchProducts() async {
     setState(() => _isLoading = true);
     try {
-      final response = await http.get(Uri.parse(_productsUrl));
+      // --- CAMBIO 2: Petición limpia al servidor Debian ---
+      final response = await http.get(
+        Uri.parse(_productsUrl),
+        headers: ApiConfig.headers,
+      );
+      
       if (response.statusCode == 200) {
         setState(() => _products = json.decode(response.body));
       }
@@ -40,10 +47,11 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
     }
   }
 
-  // --- LÓGICA DEL CARRITO ---
+  // ... (Lógica de carrito y total se mantienen igual) ...
+
   void _addToCart(dynamic prod) {
     int id = prod['id'];
-    int stock = prod['stock_actual'];
+    int stock = (prod['stock_actual'] ?? 0);
     int currentQty = _cart[id] ?? 0;
 
     if (currentQty < stock) {
@@ -74,7 +82,47 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
     return total;
   }
 
-  // --- DIÁLOGO DE COBRO (ESTILO PUNTO DE VENTA) ---
+  // --- REGISTRO DE VENTA CORREGIDO ---
+  Future<void> _registerSaleInDjango() async {
+    List details = _cart.entries.map((e) {
+      final prod = _products.firstWhere((p) => p['id'] == e.key);
+      return {
+        "producto": e.key,
+        "cantidad": e.value,
+        "precio_unitario": prod['precio_venta'].toString()
+      };
+    }).toList();
+
+    final Map<String, dynamic> saleData = {
+      "tipo": "LOCAL",
+      "cliente_nombre": "Venta Mostrador",
+      "total": _calculateTotal().toStringAsFixed(2),
+      "details": details, 
+    };
+
+    try {
+      // --- CAMBIO 3: Post usando ApiConfig para evitar IPs fijas ---
+      final response = await http.post(
+        Uri.parse(_salesUrl),
+        headers: ApiConfig.headers,
+        body: json.encode(saleData),
+      );
+
+      if (response.statusCode == 201) {
+        _showSnackBar("¡Venta registrada con éxito!", Colors.green);
+        setState(() => _cart.clear());
+        // Refrescamos productos para actualizar el stock localmente
+        _fetchProducts(); 
+      } else {
+        debugPrint("Error de Django: ${response.body}");
+        _showSnackBar("Error al guardar: ${response.statusCode}", Colors.red);
+      }
+    } catch (e) {
+      _showSnackBar("Error de conexión con Debian: $e", Colors.red);
+    }
+  }
+
+  // --- DIÁLOGO DE COBRO ---
   void _showCheckoutDialog() {
     if (_cart.isEmpty) return;
 
@@ -113,8 +161,6 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
                       labelText: "¿Con cuánto pagan?",
                       prefixText: "\$ ",
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                      filled: true,
-                      fillColor: Colors.grey[100],
                     ),
                     onChanged: (val) {
                       double pago = double.tryParse(val) ?? 0;
@@ -152,11 +198,10 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.verdeBosque,
-                    padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: _cambio >= 0 ? () {
-                    Navigator.pop(context); // Cierra diálogo
+                    Navigator.pop(context); 
                     _registerSaleInDjango(); 
                   } : null,
                   child: const Text("REGISTRAR VENTA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -169,50 +214,6 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
     );
   }
 
-  // --- ENVÍO A DJANGO ---
-  Future<void> _registerSaleInDjango() async {
-    // Estructura de detalles para el SaleSerializer
-    List details = _cart.entries.map((e) {
-      final prod = _products.firstWhere((p) => p['id'] == e.key);
-      return {
-        "producto": e.key,
-        "cantidad": e.value,
-        "precio_unitario": prod['precio_venta'].toString()
-      };
-    }).toList();
-
-    final Map<String, dynamic> saleData = {
-      "tipo": "LOCAL",
-      "cliente_nombre": "Venta Mostrador",
-      "total": _calculateTotal().toStringAsFixed(2),
-      "details": details, // Nota: Asegúrate que el serializer use 'details' o 'detalles'
-    };
-
-    try {
-      final response = await http.post(
-        Uri.parse(_salesUrl),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: json.encode(saleData),
-      );
-
-      if (response.statusCode == 201) {
-        _showSnackBar("¡Venta registrada con éxito!", Colors.green);
-        setState(() => _cart.clear());
-        if (mounted) Navigator.pop(context); // Regresa al panel principal
-      } else {
-        // Imprime el error exacto de Django en la terminal de Flutter
-        print("Error de Django: ${response.body}");
-        _showSnackBar("Error al guardar: ${response.statusCode}", Colors.red);
-      }
-    } catch (e) {
-      _showSnackBar("Error de conexión: $e", Colors.red);
-    }
-  }
-
-  // --- INTERFAZ ---
   @override
   Widget build(BuildContext context) {
     final filtered = _products.where((p) => 
@@ -221,9 +222,20 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       appBar: AppBar(
-        title: const Text("Venta Local"),
-        backgroundColor: AppColors.verdeBosque,
-      ),
+            title: const Text("Venta en Mostrador", 
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            backgroundColor: AppColors.verdeBosque,
+            iconTheme: const IconThemeData(color: Colors.white),
+            // --- AGREGAMOS ESTO ---
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.qr_code_scanner, size: 28),
+                onPressed: _escanearParaVenta,
+                tooltip: "Escanear producto",
+              ),
+              const SizedBox(width: 10),
+            ],
+          ),
       body: Column(
         children: [
           Padding(
@@ -231,7 +243,7 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
             child: TextField(
               decoration: InputDecoration(
                 hintText: "Buscar producto...",
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search, color: AppColors.verdeBosque),
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
@@ -241,7 +253,7 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
           ),
           Expanded(
             child: _isLoading 
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator(color: AppColors.verdeBosque))
               : _buildProductGrid(filtered),
           ),
           if (_cart.isNotEmpty) _buildCheckoutBar(),
@@ -273,7 +285,7 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.fastfood, color: Colors.orange, size: 40),
+              const Icon(Icons.bakery_dining, color: Colors.orange, size: 40),
               const SizedBox(height: 10),
               Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center),
               Text("\$${p['precio_venta']}", style: const TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold)),
@@ -283,12 +295,12 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 28),
                     onPressed: () => _removeFromCart(id),
                   ),
                   Text("$qty", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   IconButton(
-                    icon: const Icon(Icons.add_circle_outline, color: AppColors.verdeBosque),
+                    icon: const Icon(Icons.add_circle_outline, color: AppColors.verdeBosque, size: 28),
                     onPressed: () => _addToCart(p),
                   ),
                 ],
@@ -340,4 +352,77 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
       SnackBar(content: Text(m), backgroundColor: c, duration: const Duration(seconds: 2))
     );
   }
+
+  Future<void> _escanearParaVenta() async {
+  final MobileScannerController scannerController = MobileScannerController(
+    formats: [BarcodeFormat.ean13, BarcodeFormat.ean8],
+    detectionSpeed: DetectionSpeed.normal,
+  );
+
+  final String? codigoDetectado = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => Scaffold(
+        appBar: AppBar(
+          title: const Text("Escaneando para Venta", style: TextStyle(color: Colors.white)),
+          backgroundColor: AppColors.verdeBosque,
+        ),
+        body: Stack(
+          children: [
+            MobileScanner(
+              controller: scannerController,
+              onDetect: (capture) {
+                final List<Barcode> barcodes = capture.barcodes;
+                for (final barcode in barcodes) {
+                  final String? rawValue = barcode.rawValue;
+                  if (rawValue != null && (rawValue.length == 13 || rawValue.length == 8)) {
+                    if (RegExp(r'^[0-9]+$').hasMatch(rawValue)) {
+                      scannerController.dispose();
+                      Navigator.pop(context, rawValue);
+                      break;
+                    }
+                  }
+                }
+              },
+            ),
+            Center(
+              child: Container(
+                width: 280, height: 150,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.greenAccent, width: 3),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  scannerController.dispose();
+
+  if (codigoDetectado != null) {
+    _procesarCodigoEscaneado(codigoDetectado);
+  }
+}
+
+void _procesarCodigoEscaneado(String codigo) {
+  try {
+    // Buscamos el producto en la lista que ya tenemos cargada
+    final producto = _products.firstWhere(
+      (p) => p['codigo_barras'] == codigo,
+      orElse: () => null,
+    );
+
+    if (producto != null) {
+      _addToCart(producto);
+      _showSnackBar("Agregado: ${producto['nombre']}", AppColors.verdeBosque);
+    } else {
+      _showSnackBar("Producto no registrado ($codigo)", Colors.orange);
+    }
+  } catch (e) {
+    _showSnackBar("Error al procesar código", Colors.red);
+  }
+}
 }

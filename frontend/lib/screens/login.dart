@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../main.dart'; 
-import './admin_home.dart'; 
-import './customer_shop_screen.dart'; 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../main.dart'; 
+import '../api_config.dart'; // Importación vital
+import './admin_home.dart'; 
+import './customer_shop_screen.dart'; 
 
 class LoginScreen extends StatefulWidget { 
   const LoginScreen({super.key});
@@ -19,7 +20,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   Future<void> login() async {
-    // Validar campos vacíos antes de intentar la conexión
     if (_userController.text.trim().isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Por favor, llena todos los campos"), backgroundColor: Colors.orange),
@@ -30,8 +30,11 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // --- CAMBIO: Usamos ApiConfig.login ---
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/api/users/login/'),
+        Uri.parse(ApiConfig.login),
+        // Nota: Si tu backend espera JSON, usa jsonEncode y ApiConfig.headers
+        // Si espera Form-Data (como estaba originalmente), deja el body así:
         body: {
           'username': _userController.text.trim(),
           'password': _passwordController.text,
@@ -41,13 +44,11 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         
-        // Extraemos los datos del mapa 'user' que envía tu Django
-        final String rol = (data['user']['rol'] ?? "").toString().toUpperCase(); // Convertimos a MAYÚSCULAS para evitar errores
+        final String rol = (data['user']['rol'] ?? "").toString().toUpperCase(); 
         final String username = data['user']['username'] ?? "Usuario";
         final String? direccion = data['user']['direccion'];
         final String? telefono = data['user']['telefono'];
 
-        // Guardar datos localmente
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('username', username);
         await prefs.setString('user_rol', rol);
@@ -64,16 +65,12 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
 
-        // --- LÓGICA DE DIRECCIONAMIENTO CORREGIDA ---
-        // Verificamos el rol normalizado a mayúsculas
         if (rol == 'ADMIN' || rol == 'STAFF') {
-          debugPrint("Accediendo como Administrador: $rol");
           Navigator.pushReplacement(
               context, 
               MaterialPageRoute(builder: (context) => const AdminInventoryHub())
           );
         } else {
-          debugPrint("Accediendo como Cliente: $rol");
           Navigator.pushReplacement(
               context, 
               MaterialPageRoute(builder: (context) => const CustomerShopScreen())
@@ -87,10 +84,10 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      debugPrint("Error de Login: $e");
+      debugPrint("Error de Login en Debian: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error de conexión con el servidor")),
+        const SnackBar(content: Text("No se pudo conectar con el servidor de la tostadería")),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -99,7 +96,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Tu widget build se mantiene igual...
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       body: Center(
@@ -108,9 +104,13 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.agriculture_outlined, size: 60, color: AppColors.verdeBosque),
+              const Icon(Icons.bakery_dining_rounded, size: 80, color: AppColors.verdeBosque),
               const SizedBox(height: 20),
-              const Text("Iniciar Sesión", style: TextStyle(fontSize: 28, color: AppColors.tituloNegro, fontWeight: FontWeight.w500)),
+              const Text("Tostadería el Molino", 
+                style: TextStyle(fontSize: 24, color: AppColors.verdeBosque, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              const Text("Iniciar Sesión", 
+                style: TextStyle(fontSize: 18, color: AppColors.tituloNegro, fontWeight: FontWeight.w400)),
               const SizedBox(height: 40),
               _buildTextField(hint: "Nombre de usuario", obscure: false, controller: _userController),
               const SizedBox(height: 20),
@@ -127,8 +127,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     elevation: 0,
                   ),
                   child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("ENTRAR", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                    ? const SizedBox(width: 25, height: 25, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                    : const Text("ENTRAR", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                 ),
               ),
             ],
@@ -146,10 +146,10 @@ class _LoginScreenState extends State<LoginScreen> {
         hintText: hint,
         hintStyle: TextStyle(color: Colors.grey.shade500),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.5),
+        fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 25, vertical: 18),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: AppColors.verdeBorde, width: 2)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: AppColors.verdeBosque, width: 2)),
       ),
     );
   }

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../main.dart'; // Para AppColors y fondoHueso
+import '../main.dart'; 
+import '../api_config.dart'; // Importación esencial agregada
 import 'local_sales_personal.dart'; 
 import 'corte_caja.dart';
 
@@ -17,7 +18,8 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
   List<dynamic> _inProcessOrders = [];
   bool _isLoading = false;
 
-  final String _baseSalesUrl = 'http://10.0.2.2:8000/api/sales/';
+  // --- CAMBIO 1: Usamos la URL base desde ApiConfig ---
+  final String _baseSalesUrl = ApiConfig.sales;
 
   @override
   void initState() {
@@ -26,28 +28,35 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
   }
 
   Future<void> _refreshAll() async {
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
     try {
       await Future.wait([
         _fetchPendingOrders(),
         _fetchInProcessOrders(),
       ]);
     } catch (e) {
-      _showSnackBar("Error al actualizar datos", Colors.red);
+      _showSnackBar("Error al actualizar datos desde el servidor", Colors.red);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _fetchPendingOrders() async {
-    final response = await http.get(Uri.parse('${_baseSalesUrl}?type=PEDIDO'));
+    // Usamos las cabeceras centralizadas
+    final response = await http.get(
+      Uri.parse('$_baseSalesUrl?tipo=PEDIDO'), 
+      headers: ApiConfig.headers
+    );
     if (response.statusCode == 200) {
       setState(() => _pendingOrders = json.decode(response.body));
     }
   }
 
   Future<void> _fetchInProcessOrders() async {
-    final response = await http.get(Uri.parse('${_baseSalesUrl}?type=ENTREGA'));
+    final response = await http.get(
+      Uri.parse('$_baseSalesUrl?tipo=ENTREGA'),
+      headers: ApiConfig.headers
+    );
     if (response.statusCode == 200) {
       setState(() => _inProcessOrders = json.decode(response.body));
     }
@@ -57,47 +66,60 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
   Future<void> _processOrder(dynamic order) async {
     final int id = order['id'];
     try {
-      final response = await http.post(Uri.parse('$_baseSalesUrl$id/aceptar_pedido/'));
+      // --- CAMBIO 2: Endpoint dinámico para aceptar pedido ---
+      final response = await http.post(
+        Uri.parse('$_baseSalesUrl$id/aceptar_pedido/'),
+        headers: ApiConfig.headers
+      );
+      
       if (response.statusCode == 200) {
         _refreshAll();
-        _showSnackBar("¡Pedido enviado a entrega!", Colors.green);
+        _showSnackBar("¡Pedido enviado a ruta de entrega!", Colors.green);
       } else {
         final error = json.decode(response.body);
         _showSnackBar("Error: ${error['error']}", Colors.red);
       }
     } catch (e) {
-      _showSnackBar("Error de conexión", Colors.red);
+      _showSnackBar("Error de conexión con Debian", Colors.red);
     }
   }
 
-  // Cobrar pedido (Pasa de ENTREGA a LOCAL)
+  // Cobrar pedido (Pasa de ENTREGA a LOCAL/FINALIZADO)
   Future<void> _cobrarPedidoEntrega(int id) async {
     try {
-      final response = await http.post(Uri.parse('$_baseSalesUrl$id/cobrar_entrega/'));
+      // --- CAMBIO 3: Endpoint dinámico para cobrar entrega ---
+      final response = await http.post(
+        Uri.parse('$_baseSalesUrl$id/cobrar_entrega/'),
+        headers: ApiConfig.headers
+      );
+      
       if (response.statusCode == 200) {
         _refreshAll();
         _showSnackBar("¡Pedido cobrado con éxito!", Colors.green);
       } else {
-        _showSnackBar("Error al cobrar pedido", Colors.red);
+        _showSnackBar("Error al procesar el cobro", Colors.red);
       }
     } catch (e) {
-      _showSnackBar("Error de conexión", Colors.red);
+      _showSnackBar("Error de conexión con el servidor", Colors.red);
     }
   }
 
   Future<void> _deleteOrder(int id) async {
     try {
-      final response = await http.delete(Uri.parse('$_baseSalesUrl$id/'));
+      final response = await http.delete(
+        Uri.parse('$_baseSalesUrl$id/'),
+        headers: ApiConfig.headers
+      );
       if (response.statusCode == 204) {
         _refreshAll();
-        _showSnackBar("Pedido eliminado", Colors.orange);
+        _showSnackBar("Pedido eliminado correctamente", Colors.orange);
       }
     } catch (e) {
-      debugPrint("Error al eliminar: $e");
+      debugPrint("Error al eliminar pedido: $e");
     }
   }
 
-  // --- DIÁLOGOS ---
+  // --- MÉTODOS DE UI (Diálogos y Widgets se mantienen igual) ---
 
   void _showConfirmOrderDialog(dynamic order) {
     showDialog(
@@ -111,7 +133,7 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("Al confirmar, se descontará el stock."),
+              const Text("Al confirmar, se descontará el stock de las tostadas."),
               const Divider(),
               _buildOrderSummary(order),
             ],
@@ -132,7 +154,6 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
     );
   }
 
-  // Diálogo de Cobro para Entregas (Similar al POS Local)
   void _showCashPaymentDialog(dynamic order) {
     final double total = double.parse(order['total'].toString());
     final TextEditingController _pagoController = TextEditingController();
@@ -153,10 +174,10 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
               const SizedBox(height: 15),
               TextField(
                 controller: _pagoController,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: "Pago en Efectivo",
+                  labelText: "Monto recibido",
                   prefixText: "\$ ",
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
                 ),
@@ -166,8 +187,21 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
                 },
               ),
               const SizedBox(height: 15),
-              Text(_cambio >= 0 ? "Cambio: \$${_cambio.toStringAsFixed(2)}" : "Faltan: \$${_cambio.abs().toStringAsFixed(2)}",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _cambio >= 0 ? Colors.green : Colors.red)),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _cambio >= 0 ? Colors.green[50] : Colors.red[50],
+                  borderRadius: BorderRadius.circular(10)
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_cambio >= 0 ? "Cambio:" : "Faltan:"),
+                    Text("\$${_cambio.abs().toStringAsFixed(2)}",
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _cambio >= 0 ? Colors.green : Colors.red)),
+                  ],
+                ),
+              ),
             ],
           ),
           actions: [
@@ -178,15 +212,13 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
                 Navigator.pop(context);
                 _cobrarPedidoEntrega(order['id']);
               } : null,
-              child: const Text("FINALIZAR Y COBRAR", style: TextStyle(color: Colors.white)),
+              child: const Text("FINALIZAR COBRO", style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       ),
     );
   }
-
-  // --- INTERFAZ ---
 
   @override
   Widget build(BuildContext context) {
@@ -195,10 +227,13 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
       child: Scaffold(
         backgroundColor: AppColors.fondoHueso,
         appBar: AppBar(
-          title: const Text("Panel de Ventas", style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text("Panel de Ventas", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
           backgroundColor: AppColors.verdeBosque,
+          iconTheme: const IconThemeData(color: Colors.white),
           bottom: const TabBar(
             indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
             tabs: [
               Tab(icon: Icon(Icons.pending_actions), text: "Pendientes"),
               Tab(icon: Icon(Icons.delivery_dining), text: "En Entrega"),
@@ -246,10 +281,7 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
             icon: Icons.history, 
             label: "Corte de Caja", 
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CorteCajaScreen()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const CorteCajaScreen()));
             }
           ),
         ],
@@ -343,7 +375,7 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("${d['cantidad']}x ${d['product_name'] ?? 'Producto'}", style: const TextStyle(fontSize: 13)),
+              Text("${d['cantidad']}x ${d['producto_nombre'] ?? 'Producto'}", style: const TextStyle(fontSize: 13)),
               Text("\$${(double.parse(d['precio_unitario'].toString()) * d['cantidad']).toStringAsFixed(2)}"),
             ],
           ),
@@ -361,7 +393,7 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("¿Rechazar Pedido?"),
-        content: Text("Se eliminará el pedido de $cliente."),
+        content: Text("Se eliminará el pedido de $cliente de forma permanente."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("VOLVER")),
           TextButton(onPressed: () { Navigator.pop(context); _deleteOrder(id); }, child: const Text("ELIMINAR", style: TextStyle(color: Colors.red))),

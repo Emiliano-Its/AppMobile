@@ -4,19 +4,20 @@ from .models import Venta, DetalleVenta, FinalProduct
 class FinalProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = FinalProduct
-        fields = '__all__'
+        # Aseguramos que incluya codigo_barras para que el scanner de Flutter lo encuentre
+        fields = ['id', 'codigo_barras', 'nombre', 'precio_venta', 'stock_actual', 'activo']
 
 class SaleDetailSerializer(serializers.ModelSerializer):
-    # Usamos producto_nombre para que coincida con lo que Flutter espera
+    # Campo de solo lectura para mostrar el nombre en la lista de pedidos de Flutter
     producto_nombre = serializers.ReadOnlyField(source='producto.nombre')
 
     class Meta:
         model = DetalleVenta
-        # 'producto' es el ID para el POST, 'producto_nombre' es para el GET en Flutter
+        # 'producto' es el ID (necesario para el POST)
         fields = ['id', 'producto', 'producto_nombre', 'cantidad', 'precio_unitario']
 
 class SaleSerializer(serializers.ModelSerializer):
-    # 'details' mapea a 'detalles' en el modelo por el related_name
+    # 'details' mapea al related_name='detalles' del modelo DetalleVenta
     details = SaleDetailSerializer(many=True, source='detalles', required=False)
     seller_name = serializers.ReadOnlyField(source='usuario_vendedor.username', default="Cliente App")
     
@@ -30,29 +31,29 @@ class SaleSerializer(serializers.ModelSerializer):
             'usuario_vendedor', 
             'seller_name', 
             'cliente_nombre', 
-            'direccion_envio',           # <--- AGREGADO
-            'fecha_entrega_estimada',     # <--- AGREGADO
+            'direccion_envio',           
+            'fecha_entrega_estimada',     
             'estado', 
             'details'
         ]
-        # Hacemos el vendedor opcional en la validación del Serializer
         extra_kwargs = {
             'usuario_vendedor': {'required': False, 'allow_null': True}
         }
 
     def create(self, validated_data):
-        # 1. Extraer los detalles (usamos 'detalles' porque es el source)
+        # 1. Extraer los detalles
         details_data = validated_data.pop('detalles', [])
         
-        # 2. Crear la venta (direccion_envio y fecha_entrega_estimada ya vienen en validated_data)
+        # 2. Crear la venta principal
         sale = Venta.objects.create(**validated_data)
         
-        # 3. Crear detalles
+        # 3. Procesar cada producto del carrito
         for detail in details_data:
             product = detail.get('producto')
             qty = detail.get('cantidad')
             price = detail.get('precio_unitario')
 
+            # Crear el registro del detalle de venta
             DetalleVenta.objects.create(
                 venta=sale,
                 producto=product,
@@ -60,10 +61,16 @@ class SaleSerializer(serializers.ModelSerializer):
                 precio_unitario=price
             )
             
-            # Descontar del inventario solo si es venta LOCAL o si decides 
-            # descontarlo al aceptar el pedido después.
+            # --- LÓGICA DE INVENTARIO PARA POS (VENTA LOCAL) ---
             if sale.tipo == 'LOCAL':
-                product.stock_actual -= int(qty)
-                product.save()
+                # Validamos que no vendamos más de lo que hay (opcional pero recomendado)
+                if product.stock_actual >= int(qty):
+                    product.stock_actual -= int(qty)
+                    product.save()
+                else:
+                    # Si no hay stock, podrías lanzar una excepción o dejar que baje a negativo
+                    # según cómo prefieran manejarlo tus abuelos.
+                    product.stock_actual -= int(qty)
+                    product.save()
             
         return sale
