@@ -3,10 +3,11 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; 
-import '../api_config.dart'; // Importación esencial
+import '../api_config.dart'; 
 import './customer_pedidos.dart'; 
 import './customer_cart_screen.dart';
 import './admin_home.dart'; 
+import 'login.dart';
 
 class CustomerShopScreen extends StatefulWidget {
   const CustomerShopScreen({super.key});
@@ -23,7 +24,6 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   String _userName = "Cliente";
   bool _isAdmin = false; 
 
-  // --- CAMBIO 1: Dirección dinámica desde ApiConfig ---
   final String _productsUrl = ApiConfig.products;
 
   @override
@@ -44,7 +44,6 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   Future<void> _fetchProducts() async {
     try {
-      // --- CAMBIO 2: Petición usando URL y Cabeceras centralizadas ---
       final response = await http.get(
         Uri.parse(_productsUrl),
         headers: ApiConfig.headers,
@@ -53,7 +52,6 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
       if (response.statusCode == 200) {
         List<dynamic> data = json.decode(response.body);
         setState(() {
-          // Solo mostramos productos activos y con stock
           _allProducts = data.where((p) => 
             (p['stock_actual'] ?? 0) > 0 && p['activo'] == true
           ).toList();
@@ -77,7 +75,6 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     });
   }
 
-  // ... (Lógica de carrito se mantiene igual) ...
   void _addToCart(int id) => setState(() => _cart[id] = (_cart[id] ?? 0) + 1);
   
   void _removeFromCart(int id) {
@@ -192,10 +189,20 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text("Cerrar Sesión"),
-            onTap: () {
-              // Limpiar sesión si es necesario antes de salir
-              Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+            title: const Text("Cerrar Sesión", 
+              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            onTap: () async {
+              // 1. Limpiamos los datos guardados en el teléfono
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.clear(); // Borra username, rol, etc.
+
+              // 2. Navegamos al Login eliminando todas las pantallas previas
+              if (!mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()), // Asegúrate de que LoginScreen esté importado
+                (route) => false,
+              );
             },
           ),
           const SizedBox(height: 20),
@@ -274,14 +281,25 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // --- SECCIÓN DE IMAGEN CORREGIDA ---
               Expanded(
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
+                    color: Colors.grey.shade100,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                   ),
-                  child: const Icon(Icons.bakery_dining_rounded, size: 55, color: Colors.orange),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    child: product['imagen'] != null
+                        ? Image.network(
+                            ApiConfig.getImageUrl(product['imagen']),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => 
+                              const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                          )
+                        : const Icon(Icons.bakery_dining_rounded, size: 55, color: Colors.orange),
+                  ),
                 ),
               ),
               Padding(

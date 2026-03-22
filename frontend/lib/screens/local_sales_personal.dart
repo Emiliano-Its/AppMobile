@@ -145,50 +145,52 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
                   Text("Finalizar Cobro", style: TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text("TOTAL A PAGAR:", style: TextStyle(fontSize: 14, color: Colors.grey)),
-                  Text("\$${total.toStringAsFixed(2)}", 
-                    style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _pagoController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    autofocus: true,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    decoration: InputDecoration(
-                      labelText: "¿Con cuánto pagan?",
-                      prefixText: "\$ ",
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+              content: SingleChildScrollView( // <--- AGREGADO PARA EVITAR OVERFLOW
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("TOTAL A PAGAR:", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                    Text("\$${total.toStringAsFixed(2)}", 
+                      style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _pagoController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        labelText: "¿Con cuánto pagan?",
+                        prefixText: "\$ ",
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                      onChanged: (val) {
+                        double pago = double.tryParse(val) ?? 0;
+                        setDialogState(() {
+                          _cambio = pago - total;
+                        });
+                      },
                     ),
-                    onChanged: (val) {
-                      double pago = double.tryParse(val) ?? 0;
-                      setDialogState(() {
-                        _cambio = pago - total;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: _cambio >= 0 ? Colors.green[50] : Colors.red[50],
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: _cambio >= 0 ? Colors.green : Colors.red),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: _cambio >= 0 ? Colors.green[50] : Colors.red[50],
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: _cambio >= 0 ? Colors.green : Colors.red),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_cambio >= 0 ? "CAMBIO:" : "FALTAN:", 
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text("\$${_cambio.abs().toStringAsFixed(2)}", 
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, 
+                            color: _cambio >= 0 ? Colors.green[700] : Colors.red[700])),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(_cambio >= 0 ? "CAMBIO:" : "FALTAN:", 
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text("\$${_cambio.abs().toStringAsFixed(2)}", 
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, 
-                          color: _cambio >= 0 ? Colors.green[700] : Colors.red[700])),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -236,6 +238,8 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
               const SizedBox(width: 10),
             ],
           ),
+
+          
       body: Column(
         children: [
           Padding(
@@ -269,7 +273,7 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 15),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2, 
-        childAspectRatio: 0.8,
+        childAspectRatio: 0.7, // Ajustado un poco para dar espacio a la imagen
         crossAxisSpacing: 10,
         mainAxisSpacing: 10
       ),
@@ -281,30 +285,52 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
 
         return Card(
           elevation: 2,
+          clipBehavior: Clip.antiAlias, // Para que la imagen respete los bordes curvos
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.bakery_dining, color: Colors.orange, size: 40),
-              const SizedBox(height: 10),
-              Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-              Text("\$${p['precio_venta']}", style: const TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold)),
-              Text("Stock: ${p['stock_actual']}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              const SizedBox(height: 10),
+              // --- SECCIÓN DE IMAGEN IMPLEMENTADA ---
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  color: Colors.grey[100],
+                  child: p['imagen'] != null
+                      ? Image.network(
+                          ApiConfig.getImageUrl(p['imagen']),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => 
+                            const Icon(Icons.broken_image, color: Colors.grey),
+                        )
+                      : const Icon(Icons.bakery_dining, color: Colors.orange, size: 40),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(p['nombre'], 
+                style: const TextStyle(fontWeight: FontWeight.bold), 
+                textAlign: TextAlign.center,
+                maxLines: 1, overflow: TextOverflow.ellipsis
+              ),
+              Text("\$${p['precio_venta']}", 
+                style: const TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold)),
+              Text("Stock: ${p['stock_actual']}", 
+                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              const SizedBox(height: 5),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 28),
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 24),
                     onPressed: () => _removeFromCart(id),
                   ),
-                  Text("$qty", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text("$qty", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   IconButton(
-                    icon: const Icon(Icons.add_circle_outline, color: AppColors.verdeBosque, size: 28),
+                    icon: const Icon(Icons.add_circle_outline, color: AppColors.verdeBosque, size: 24),
                     onPressed: () => _addToCart(p),
                   ),
                 ],
-              )
+              ),
+              const SizedBox(height: 5),
             ],
           ),
         );

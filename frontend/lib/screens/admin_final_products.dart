@@ -3,7 +3,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../main.dart'; 
-import '../api_config.dart'; 
+import '../api_config.dart';
+import 'dart:io'; // Para manejar el archivo de la imagen
+import 'package:image_picker/image_picker.dart'; // Para abrir la galería o cámara
+import 'package:http_parser/http_parser.dart';
 
 class FinalProductsScreen extends StatefulWidget {
   const FinalProductsScreen({super.key});
@@ -244,7 +247,8 @@ void _mostrarDialogoConfirmarRegistro(String codigo) {
                 producto['codigo_barras'],
                 producto['precio_venta'].toString(),
                 nuevoStockTotal.toString(),
-                true,
+                true, // isEditing
+                producto['activo'] ?? true, // <--- PASAMOS SU ESTADO ACTUAL
                 id: producto['id']
               );
             },
@@ -282,31 +286,48 @@ void _mostrarDialogoConfirmarRegistro(String codigo) {
   }
 
   // --- CORRECCIÓN 3: Guardar con Headers y URL corregida ---
-  Future<void> _saveProduct(String name, String code, String price, String stock, bool isEditing, {int? id}) async {
-    final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
-    
-    final Map<String, dynamic> data = {
-      "nombre": name,
-      "codigo_barras": code,
-      "precio_venta": price,
-      "stock_actual": int.parse(stock),
-    };
+// --- MODIFICACIÓN: Agregamos el parámetro bool isActive ---
+Future<void> _saveProduct(String name, String code, String price, String stock, bool isEditing, bool isActive, {int? id}) async {
+  setState(() => _isLoading = true);
+  
+  final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
+  var request = http.MultipartRequest(isEditing ? 'PUT' : 'POST', url);
+  
+  request.headers.addAll(ApiConfig.headers);
 
-    try {
-      final response = isEditing 
-          ? await http.put(url, headers: ApiConfig.headers, body: jsonEncode(data))
-          : await http.post(url, headers: ApiConfig.headers, body: jsonEncode(data));
+  // Agregamos los campos de texto
+  request.fields['nombre'] = name;
+  request.fields['codigo_barras'] = code;
+  request.fields['precio_venta'] = price;
+  request.fields['stock_actual'] = stock;
+  // --- ESTA ES LA CLAVE: Enviamos el estado de activo ---
+  request.fields['activo'] = isActive.toString(); 
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        _fetchProductos(); 
-        _showSnackBar("¡Inventario actualizado con éxito!", Colors.green);
-      } else {
-        _showSnackBar("Error al guardar: ${response.body}", Colors.red);
-      }
-    } catch (e) {
-      _showSnackBar("Error de red al conectar con Debian", Colors.red);
-    }
+  if (_imageFile != null) {
+    request.files.add(await http.MultipartFile.fromPath(
+      'imagen',
+      _imageFile!.path,
+      contentType: MediaType('image', 'jpeg'),
+    ));
   }
+
+  try {
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      _fetchProductos(); 
+      _showSnackBar("¡Producto guardado con éxito!", Colors.green);
+      _imageFile = null;
+    } else {
+      _showSnackBar("Error en el servidor: ${response.body}", Colors.red);
+    }
+  } catch (e) {
+    _showSnackBar("Error de red al conectar con Debian", Colors.red);
+  } finally {
+    setState(() => _isLoading = false);
+  }
+}
 
   // --- TOGGLE ACTIVO ---
   Future<void> _toggleProductStatus(int id) async {
@@ -478,18 +499,13 @@ void _mostrarDialogoConfirmarRegistro(String codigo) {
 void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
   final bool isEditing = producto != null;
   
-  final nombreCtrl = TextEditingController(text: isEditing ? producto['nombre'] : '');
-  
-  // LÓGICA DE CÓDIGO: 
-  // 1. Si editamos, usa el del producto. 
-  // 2. Si es nuevo pero viene del escáner, usa ese. 
-  // 3. Si es nuevo manual, vacío.
-  final codigoCtrl = TextEditingController(
-    text: isEditing 
-        ? producto['codigo_barras'] 
-        : (nuevoCodigoEscanedado ?? '')
-  );
+  // Si no estamos editando, limpiamos la imagen seleccionada previamente
+  if (!isEditing) _imageFile = null;
 
+  final nombreCtrl = TextEditingController(text: isEditing ? producto['nombre'] : '');
+  final codigoCtrl = TextEditingController(
+    text: isEditing ? producto['codigo_barras'] : (nuevoCodigoEscanedado ?? '')
+  );
   final precioCtrl = TextEditingController(text: isEditing ? producto['precio_venta'].toString() : '');
   final stockCtrl = TextEditingController(text: isEditing ? producto['stock_actual'].toString() : '');
 
@@ -498,60 +514,111 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
     isScrollControlled: true,
     backgroundColor: AppColors.fondoHueso,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-    builder: (context) => Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20, 
-        left: 25, right: 25, top: 25
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isEditing ? "Editar Producto" : "Nuevo Producto (Escaneado)", 
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)
-          ),
-          const SizedBox(height: 20),
-          _buildInput("Nombre del producto", nombreCtrl),
-          _buildInput("Código de Barras", codigoCtrl), // Ya vendrá lleno si falló la búsqueda
-          Row(
+    builder: (context) => StatefulBuilder(
+      builder: (context, setModalState) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20, 
+          left: 25, right: 25, top: 25
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(child: _buildInput("Precio", precioCtrl, isNumber: true)),
-              const SizedBox(width: 15),
-              Expanded(child: _buildInput("Stock Inicial", stockCtrl, isNumber: true)),
+              Text(
+                isEditing ? "Editar Producto" : "Nuevo Producto", 
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)
+              ),
+              const SizedBox(height: 20),
+
+              // --- SECCIÓN DE IMAGEN ---
+              GestureDetector(
+                onTap: () async {
+                  await _pickImage(); // Función que abre la galería
+                  setModalState(() {}); // Refresca la vista previa dentro del modal
+                },
+                child: Container(
+                  height: 130,
+                  width: 130,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.verdeBosque.withOpacity(0.3), width: 2),
+                  ),
+                  child: _imageFile != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.file(_imageFile!, fit: BoxFit.cover),
+                        )
+                      : (isEditing && producto['imagen'] != null)
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(18),
+                              child: Image.network(
+                                producto['imagen'], // URL que viene de Django
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => 
+                                    const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                              ),
+                            )
+                          : const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo, size: 40, color: AppColors.verdeBosque),
+                                SizedBox(height: 5),
+                                Text("Subir foto", style: TextStyle(fontSize: 12, color: AppColors.verdeBosque)),
+                              ],
+                            ),
+                ),
+              ),
+              const SizedBox(height: 25),
+
+              // --- CAMPOS DE TEXTO ---
+              _buildInput("Nombre del producto", nombreCtrl),
+              _buildInput("Código de Barras", codigoCtrl), 
+              Row(
+                children: [
+                  Expanded(child: _buildInput("Precio", precioCtrl, isNumber: true)),
+                  const SizedBox(width: 15),
+                  Expanded(child: _buildInput("Stock Inicial", stockCtrl, isNumber: true)),
+                ],
+              ),
+              const SizedBox(height: 30),
+
+              // --- BOTÓN DE ACCIÓN ---
+              // --- BOTÓN DE ACCIÓN DENTRO DEL FORMULARIO ---
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.verdeBosque, 
+                    shape: const StadiumBorder()
+                  ),
+                  onPressed: () {
+                    if (nombreCtrl.text.isNotEmpty && precioCtrl.text.isNotEmpty) {
+                      _saveProduct(
+                        nombreCtrl.text,
+                        codigoCtrl.text,
+                        precioCtrl.text,
+                        stockCtrl.text,
+                        isEditing,
+                        // --- PASAMOS EL ESTADO ACTUAL O TRUE SI ES NUEVO ---
+                        isEditing ? (producto['activo'] ?? true) : true, 
+                        id: isEditing ? producto['id'] : null,
+                      );
+                      Navigator.pop(context);
+                    } else {
+                      _showSnackBar("Nombre y precio son obligatorios", Colors.red);
+                    }
+                  },
+                  child: Text(
+                    isEditing ? "ACTUALIZAR DATOS" : "REGISTRAR EN DEBIAN", 
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 30),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.verdeBosque, 
-                shape: const StadiumBorder()
-              ),
-              onPressed: () {
-                if (nombreCtrl.text.isNotEmpty && precioCtrl.text.isNotEmpty) {
-                  _saveProduct(
-                    nombreCtrl.text,
-                    codigoCtrl.text,
-                    precioCtrl.text,
-                    stockCtrl.text,
-                    isEditing,
-                    id: isEditing ? producto['id'] : null,
-                  );
-                  Navigator.pop(context);
-                } else {
-                  _showSnackBar("El nombre y precio son obligatorios", Colors.red);
-                }
-              },
-              child: Text(
-                isEditing ? "ACTUALIZAR" : "REGISTRAR NUEVO PRODUCTO", 
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     ),
   );
@@ -571,4 +638,20 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
       ),
     );
   }
+
+  File? _imageFile; // Aquí guardaremos la foto temporalmente
+final ImagePicker _picker = ImagePicker();
+
+Future<void> _pickImage() async {
+  final XFile? pickedFile = await _picker.pickImage(
+    source: ImageSource.gallery, // O ImageSource.camera si quieres tomar la foto al momento
+    imageQuality: 50, // Bajamos la calidad para que no pese tanto en tu servidor Debian
+  );
+
+  if (pickedFile != null) {
+    setState(() {
+      _imageFile = File(pickedFile.path);
+    });
+  }
+}
 }

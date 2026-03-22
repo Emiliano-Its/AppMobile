@@ -4,15 +4,18 @@ from django.db.models import Sum
 
 class FinalProduct(models.Model):
     codigo_barras = models.CharField(
-    max_length=100, 
-    unique=True, 
-    null=True,   # Permite que sea nulo en la base de datos
-    blank=True   # Permite que el formulario lo acepte vacío
+        max_length=100, 
+        unique=True, 
+        null=True,   # Permite que sea nulo en la base de datos
+        blank=True   # Permite que el formulario lo acepte vacío
     )       
     nombre = models.CharField(max_length=100)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
     stock_actual = models.IntegerField(default=0)
     activo = models.BooleanField(default=True)
+    
+    # --- CAMBIO AGREGADO: SOPORTE PARA IMÁGENES ---
+    imagen = models.ImageField(upload_to='productos/', null=True, blank=True)
 
     def __str__(self):
         return self.nombre

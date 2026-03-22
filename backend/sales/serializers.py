@@ -2,10 +2,14 @@ from rest_framework import serializers
 from .models import Venta, DetalleVenta, FinalProduct
 
 class FinalProductSerializer(serializers.ModelSerializer):
+    # Agregamos el campo de imagen para que Django maneje la URL de los archivos media
+    imagen = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = FinalProduct
         # Aseguramos que incluya codigo_barras para que el scanner de Flutter lo encuentre
-        fields = ['id', 'codigo_barras', 'nombre', 'precio_venta', 'stock_actual', 'activo']
+        # Agregamos 'imagen' al final de la lista de campos
+        fields = ['id', 'codigo_barras', 'nombre', 'precio_venta', 'stock_actual', 'activo', 'imagen']
 
 class SaleDetailSerializer(serializers.ModelSerializer):
     # Campo de solo lectura para mostrar el nombre en la lista de pedidos de Flutter

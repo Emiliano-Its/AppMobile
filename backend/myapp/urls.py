@@ -1,29 +1,30 @@
 """
-URL configuration for myapp project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+URL configuration for myapp project (Tostadería el Molino).
 """
 from django.contrib import admin
-from django.urls import path
-from rest_framework.authtoken import views
 from django.urls import path, include
-
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/login/', views.obtain_auth_token),
-    path('api/', include('sales.urls')),
+    
+    # --- APP DE USUARIOS ---
+    # Esto resuelve: /api/users/ (Registro) y /api/users/login/ (Login)
     path('api/users/', include('users.urls')),
+    
+    # --- APP DE INVENTARIO (PRODUCTOS) ---
+    # Al dejarlo así, las rutas dentro de inventory/urls.py 
+    # empezarán directamente después de /api/
+    # Ejemplo: /api/FinalProduct/
     path('api/', include('inventory.urls')),
+    
+    # --- APP DE VENTAS ---
+    # Ejemplo: /api/sales/
+    path('api/', include('sales.urls')),
 ]
+
+# --- SERVIR ARCHIVOS MEDIA (FOTOS DE PRODUCTOS) ---
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
