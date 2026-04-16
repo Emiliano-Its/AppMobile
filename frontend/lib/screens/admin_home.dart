@@ -1,10 +1,11 @@
-// lib/screens/admin/admin_inventory_hub.dart
 import 'package:flutter/material.dart';
 import '../main.dart';
 import './admin_final_products.dart';
 import './admin_raw_material.dart';
 import './sales_personal.dart'; 
 import './customer_shop_screen.dart';
+// --- IMPORTACIÓN NUEVA ---
+import './admin_stats.dart'; 
 
 class AdminInventoryHub extends StatelessWidget {
   const AdminInventoryHub({super.key});
@@ -14,14 +15,11 @@ class AdminInventoryHub extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       appBar: AppBar(
-        title: const Text("Bienvenido, Administrador.", style: TextStyle(color: Colors.white)),
+        title: const Text("Panel Administrativo", style: TextStyle(color: Colors.white)),
         backgroundColor: AppColors.verdeBosque,
         elevation: 0,
-        // --- ESTA ES LA CORRECCIÓN ---
-        automaticallyImplyLeading: false, // Esto quita la flecha de regreso "fantasma"
-        // -----------------------------
+        automaticallyImplyLeading: false, 
         actions: [
-          // Opcional: Podrías añadir un botón de cerrar sesión aquí también
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
@@ -34,10 +32,26 @@ class AdminInventoryHub extends StatelessWidget {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
+            // --- NUEVA OPCIÓN: ESTADÍSTICAS ---
+            _buildLargeOption(
+              context,
+              title: "Estadísticas y Optimización",
+              subtitle: "Rendimiento, costos y utilidades netas",
+              icon: Icons.bar_chart_rounded,
+              color: Colors.teal.shade700, 
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AdminStatsScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+
             _buildLargeOption(
               context,
               title: "Materias Primas",
-              subtitle: "Setup supplies, costs, and providers",
+              subtitle: "Control de bultos, costos y stock actual",
               icon: Icons.inventory_2_outlined,
               color: AppColors.verdeBosque,
               onTap: () {
@@ -52,7 +66,7 @@ class AdminInventoryHub extends StatelessWidget {
             _buildLargeOption(
               context,
               title: "Productos Finales",
-              subtitle: "Maneja el catálogo de Productos finales",
+              subtitle: "Maneja el catálogo de Tostadas y paquetes",
               icon: Icons.shopping_cart_checkout_rounded,
               color: const Color(0xFFE8A400), 
               onTap: () {
@@ -67,7 +81,7 @@ class AdminInventoryHub extends StatelessWidget {
             _buildLargeOption(
               context,
               title: "Ventas y Ordenes",
-              subtitle: "Monitorea las órdenes y el historial de Ventas",
+              subtitle: "Monitorea entregas y el historial de ventas",
               icon: Icons.assignment_turned_in_rounded,
               color: Colors.blue.shade700, 
               onTap: () {
@@ -82,12 +96,10 @@ class AdminInventoryHub extends StatelessWidget {
             _buildLargeOption(
               context,
               title: "Vista de Comprador",
-              subtitle: "Ve lo que tus clientes ven",
+              subtitle: "Acceso a la tienda pública",
               icon: Icons.storefront_rounded,
               color: Colors.purple.shade600, 
               onTap: () {
-                // Usamos pushReplacement para que al ir a la tienda 
-                // no se quede la pantalla de admin "atrás"
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (context) => const CustomerShopScreen()),
@@ -140,7 +152,7 @@ class AdminInventoryHub extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 18, 
                       fontWeight: FontWeight.bold, 
-                      color: AppColors.tituloNegro
+                      color: Color(0xFF1A1A1A) // Color de título sólido
                     )
                   ),
                   const SizedBox(height: 4),
