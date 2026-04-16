@@ -1,6 +1,6 @@
 class ApiConfig {
   // 1. IP de tu servidor Debian
-  static const String serverIp = "10.75.167.248"; 
+  static const String serverIp = "192.168.100.13"; 
   static const String port = "8000";
 
   // --- NUEVA BASE PARA MEDIOS ---
