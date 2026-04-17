@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// Importaciones de configuración y estilos
 import '../main.dart'; 
 import '../api_config.dart'; 
-import './admin_home.dart'; 
-import './customer_shop_screen.dart'; 
-// --- IMPORTACIÓN DE LA NUEVA PANTALLA ---
-import './registro_user.dart'; 
+
+// --- IMPORTACIONES DE TUS PANTALLAS ---
+import 'registro_user.dart'; 
+import 'main_wrapper.dart';
 
 class LoginScreen extends StatefulWidget { 
   const LoginScreen({super.key});
@@ -18,11 +20,12 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
-  bool _obscurePassword = true; // Para poder ver/ocultar contraseña
+  bool _obscurePassword = true; 
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   Future<void> login() async {
+    // 1. Validación básica
     if (_userController.text.trim().isEmpty || _passwordController.text.isEmpty) {
       _showSnackBar("Por favor, llena todos los campos", Colors.orange);
       return;
@@ -31,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // --- CORRECCIÓN: Usar json.encode para compatibilidad con ApiConfig.headers ---
+      // 2. Petición al servidor
       final response = await http.post(
         Uri.parse(ApiConfig.login),
         headers: ApiConfig.headers,
@@ -44,9 +47,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         
-        final String rol = (data['user']['rol'] ?? "").toString().toUpperCase(); 
-        final String username = data['user']['username'] ?? "Usuario";
+        // 3. Extraer datos (maneja si vienen en data['user'] o directo en data)
+        final dynamic userData = data['user'] ?? data;
+        final String rol = (userData['rol'] ?? "CLIENTE").toString().toUpperCase().trim(); 
+        final String username = userData['username'] ?? "Usuario";
         
+        // 4. Guardar sesión
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('username', username);
         await prefs.setString('user_rol', rol);
@@ -55,24 +61,18 @@ class _LoginScreenState extends State<LoginScreen> {
         
         _showSnackBar("¡Bienvenido, $username!", AppColors.verdeBosque);
 
-        if (rol == 'ADMIN' || rol == 'STAFF') {
-          Navigator.pushReplacement(
-              context, 
-              MaterialPageRoute(builder: (context) => const AdminInventoryHub())
-          );
-        } else {
-          Navigator.pushReplacement(
-              context, 
-              MaterialPageRoute(builder: (context) => const CustomerShopScreen())
-          );
-        }
+        // 5. NAVEGACIÓN AL WRAPPER (Él decide qué mostrar según el rol)
+        Navigator.pushAndRemoveUntil(
+            context, 
+            MaterialPageRoute(builder: (context) => const MainWrapper()),
+            (route) => false,
+        );
         
       } else {
         _showSnackBar("Usuario o contraseña incorrectos", Colors.red);
       }
     } catch (e) {
-      debugPrint("Error de Login en Debian: $e");
-      _showSnackBar("Error al conectar con el servidor de la tostadería", Colors.red);
+      _showSnackBar("Error al conectar con el servidor", Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -80,7 +80,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color, duration: const Duration(seconds: 2)),
+      SnackBar(
+        content: Text(message), 
+        backgroundColor: color,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -96,22 +100,21 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const Icon(Icons.bakery_dining_rounded, size: 90, color: AppColors.verdeBosque),
               const SizedBox(height: 15),
-              const Text("Tostadería el Molino", 
-                style: TextStyle(fontSize: 26, color: AppColors.verdeBosque, fontWeight: FontWeight.bold)),
-              const Text("Tradición en cada bocado", 
-                style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic)),
+              const Text(
+                "Tostadería el Molino", 
+                style: TextStyle(fontSize: 26, color: AppColors.verdeBosque, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 50),
               
               _buildTextField(
                 hint: "Nombre de usuario", 
-                icon: Icons.person_outline,
+                icon: Icons.person_outline, 
                 controller: _userController
               ),
               const SizedBox(height: 20),
-              
               _buildTextField(
                 hint: "Contraseña", 
-                icon: Icons.lock_outline,
+                icon: Icons.lock_outline, 
                 isPassword: true, 
                 controller: _passwordController
               ),
@@ -129,14 +132,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     elevation: 2,
                   ),
                   child: _isLoading 
-                    ? const SizedBox(width: 25, height: 25, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-                    : const Text("ENTRAR", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                    ? const SizedBox(
+                        width: 25, 
+                        height: 25, 
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
+                      )
+                    : const Text(
+                        "INICIAR SESIÓN", 
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)
+                      ),
                 ),
               ),
               
               const SizedBox(height: 25),
 
-              // --- APARTADO PARA REGISTRARSE ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -148,8 +157,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         MaterialPageRoute(builder: (context) => const RegisterUserScreen()),
                       );
                     },
-                    child: const Text("Regístrate aquí", 
-                      style: TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      "Regístrate aquí", 
+                      style: TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold)
+                    ),
                   ),
                 ],
               ),
@@ -162,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildTextField({
     required String hint, 
-    required IconData icon,
+    required IconData icon, 
     bool isPassword = false, 
     required TextEditingController controller
   }) {
@@ -171,19 +182,24 @@ class _LoginScreenState extends State<LoginScreen> {
       obscureText: isPassword ? _obscurePassword : false,
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon: Icon(icon, color: AppColors.verdeBosque, size: 22),
+        prefixIcon: Icon(icon, color: AppColors.verdeBosque),
         suffixIcon: isPassword 
           ? IconButton(
               icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off, color: Colors.grey),
               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
             )
           : null,
-        hintStyle: TextStyle(color: Colors.grey.shade500),
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: AppColors.verdeBosque, width: 2)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20), 
+          borderSide: BorderSide(color: Colors.grey.shade300)
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20), 
+          borderSide: const BorderSide(color: AppColors.verdeBosque, width: 2)
+        ),
       ),
     );
   }

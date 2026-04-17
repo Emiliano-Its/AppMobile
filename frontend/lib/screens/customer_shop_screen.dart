@@ -3,11 +3,9 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; 
-import '../api_config.dart'; 
-import './customer_pedidos.dart'; 
+import '../api_config.dart';  
 import './customer_cart_screen.dart';
-import './admin_home.dart'; 
-import 'login.dart';
+import './admin_home.dart';
 
 class CustomerShopScreen extends StatefulWidget {
   const CustomerShopScreen({super.key});
@@ -60,7 +58,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         });
       }
     } catch (e) {
-      debugPrint("Error al obtener productos de Debian: $e");
+      debugPrint("Error al obtener productos: $e");
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -98,12 +96,20 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   }
 
   void _navigateToCart() async {
+    final prefs = await SharedPreferences.getInstance();
+    String direccion = prefs.getString('default_address') ?? '';
+    String telefono = prefs.getString('default_phone') ?? '';
+
+    if (!mounted) return;
+
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CustomerCartScreen(
           cart: _cart,
           allProducts: _allProducts,
+          defaultAddress: direccion,
+          defaultPhone: telefono,
         ),
       ),
     );
@@ -114,8 +120,28 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       appBar: AppBar(
-        title: const Text("Tostadería el Molino", 
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        leading: _isAdmin 
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () {
+                // Intentamos hacer pop, si no puede (porque es la raíz), 
+                // lo mandamos manualmente al Home de Admin.
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AdminInventoryHub()),
+                    (route) => false,
+                  );
+                }
+              },
+            )
+          : null,
+        title: const Text(
+          "Tostadería el Molino", 
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)
+        ),
         backgroundColor: AppColors.verdeBosque,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
@@ -123,7 +149,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           _buildCartBadge(),
         ],
       ),
-      drawer: _buildDrawer(), 
+
+
       body: Column(
         children: [
           _buildSearchBar(),
@@ -138,82 +165,9 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     );
   }
 
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: AppColors.fondoHueso,
-      child: Column(
-        children: [
-          UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(color: AppColors.verdeBosque),
-            currentAccountPicture: const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.person, size: 40, color: AppColors.verdeBosque),
-            ),
-            accountName: Text(_userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            accountEmail: Text(_isAdmin ? "Panel de Administrador" : "Cliente"),
-          ),
-          
-          if (_isAdmin) ...[
-            ListTile(
-              leading: const Icon(Icons.admin_panel_settings, color: Colors.orange),
-              title: const Text("Gestión de Inventario", 
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context, 
-                  MaterialPageRoute(builder: (context) => const AdminInventoryHub())
-                );
-              },
-            ),
-            const Divider(),
-          ],
-
-          ListTile(
-            leading: const Icon(Icons.shop_two, color: AppColors.verdeBosque),
-            title: const Text("Tienda de Tostadas"),
-            onTap: () => Navigator.pop(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.assignment, color: AppColors.verdeBosque),
-            title: const Text("Estado de mis Pedidos"),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context, 
-                MaterialPageRoute(builder: (context) => const CustomerPedidos())
-              );
-            },
-          ),
-          const Spacer(),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text("Cerrar Sesión", 
-              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-            onTap: () async {
-              // 1. Limpiamos los datos guardados en el teléfono
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.clear(); // Borra username, rol, etc.
-
-              // 2. Navegamos al Login eliminando todas las pantallas previas
-              if (!mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()), // Asegúrate de que LoginScreen esté importado
-                (route) => false,
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCartBadge() {
     return InkWell(
-      onTap: _cart.isNotEmpty ? _navigateToCart : null,
+      onTap: _navigateToCart, 
       child: Padding(
         padding: const EdgeInsets.only(right: 15, top: 5),
         child: Stack(
@@ -257,7 +211,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   Widget _buildProductGrid() {
     if (_filteredProducts.isEmpty) {
-      return const Center(child: Text("No hay tostadas disponibles por ahora."));
+      return const Center(child: Text("No hay productos disponibles."));
     }
     return GridView.builder(
       padding: const EdgeInsets.all(15),
@@ -281,7 +235,6 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- SECCIÓN DE IMAGEN CORREGIDA ---
               Expanded(
                 child: Container(
                   width: double.infinity,
@@ -362,7 +315,9 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -5))],
+        boxShadow: [
+          BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -5))
+        ],
       ),
       child: Row(
         children: [
@@ -371,8 +326,10 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text("Total de tu pedido", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              Text("\$${_calculateTotal().toStringAsFixed(2)}", 
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)),
+              Text(
+                "\$${_calculateTotal().toStringAsFixed(2)}", 
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.verdeBosque),
+              ),
             ],
           ),
           const Spacer(),

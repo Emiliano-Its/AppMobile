@@ -2,17 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_map/flutter_map.dart'; // Librería gratuita
+import 'package:latlong2/latlong.dart'; // Manejo de coordenadas
 import '../main.dart'; 
-import '../api_config.dart'; // Importación agregada para centralizar la IP
+import '../api_config.dart';
 
 class CustomerCartScreen extends StatefulWidget {
   final Map<int, int> cart;
   final List<dynamic> allProducts;
+  
+  // Datos predeterminados que vienen de la cuenta o el perfil
+  final String defaultAddress;
+  final String defaultPhone;
 
   const CustomerCartScreen({
     super.key, 
     required this.cart, 
-    required this.allProducts
+    required this.allProducts,
+    this.defaultAddress = '',
+    this.defaultPhone = '',
   });
 
   @override
@@ -21,13 +29,33 @@ class CustomerCartScreen extends StatefulWidget {
 
 class _CustomerCartScreenState extends State<CustomerCartScreen> {
   final TextEditingController _direccionController = TextEditingController();
+  final TextEditingController _telefonoController = TextEditingController();
   final List<String> _disponibilidades = [];
   bool _isSubmitting = false;
+
+  // Variables para el mapa
+  LatLng _selectedLocation = const LatLng(25.6866, -100.3161); // Ubicación inicial
+  final MapController _mapController = MapController();
 
   @override
   void initState() {
     super.initState();
-    _direccionController.text = ""; 
+    // Sincronización de los campos de texto
+    _direccionController.text = widget.defaultAddress;
+    _telefonoController.text = widget.defaultPhone;
+    _loadStoredLocation();
+  }
+
+  // Carga las coordenadas guardadas previamente por el cliente
+  Future<void> _loadStoredLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    double? lat = prefs.getDouble('last_lat');
+    double? lng = prefs.getDouble('last_lng');
+    if (lat != null && lng != null) {
+      setState(() {
+        _selectedLocation = LatLng(lat, lng);
+      });
+    }
   }
 
   double _calculateTotal() {
@@ -39,6 +67,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     return total;
   }
 
+  // Lógica para añadir fechas y horas de disponibilidad
   Future<void> _addDisponibilidad() async {
     final DateTimeRange? pickedDate = await showDateRangePicker(
       context: context,
@@ -86,8 +115,12 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     });
   }
 
-  // --- FUNCIÓN DE CONFIRMACIÓN CORREGIDA ---
+  // Proceso de confirmación y envío del pedido
   Future<void> _confirmOrder() async {
+    if (widget.cart.isEmpty) {
+      _showSnackBar("El carrito está vacío.");
+      return;
+    }
     if (_direccionController.text.trim().isEmpty) {
       _showSnackBar("Por favor, ingresa una dirección de envío");
       return;
@@ -115,6 +148,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       "tipo": "PEDIDO",
       "cliente_nombre": username,
       "direccion_envio": _direccionController.text.trim(),
+      "telefono_contacto": _telefonoController.text.trim(),
       "fecha_entrega_estimada": _disponibilidades.join(" | "), 
       "total": _calculateTotal(),
       "estado": "PENDIENTE",
@@ -122,7 +156,6 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     };
 
     try {
-      // CAMBIO: Usamos ApiConfig.sales y ApiConfig.headers
       final response = await http.post(
         Uri.parse(ApiConfig.sales),
         headers: ApiConfig.headers,
@@ -136,7 +169,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
          _showSnackBar("Error al enviar el pedido: ${response.body}");
       }
     } catch (e) {
-      _showSnackBar("Error de conexión con el servidor Debian.");
+      _showSnackBar("Error de conexión con el servidor.");
     } finally {
       if(mounted) setState(() => _isSubmitting = false);
     }
@@ -145,8 +178,6 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
   void _showSnackBar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
-
-  // ... (El resto del código de la interfaz UI se mantiene igual) ...
 
   @override
   Widget build(BuildContext context) {
@@ -165,28 +196,76 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
             const Text("1. Resumen de Productos", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
             _buildCartList(),
+            
             const Divider(height: 40),
             
-            const Text("2. Dirección de Entrega", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text("2. Ubicación de Entrega", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            _buildAddressInput(),
+            
+            // Mapa sincronizado
+            Container(
+              height: 200,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: AppColors.verdeBosque, width: 1),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _selectedLocation,
+                    initialZoom: 15.0,
+                    onTap: (tapPosition, point) {
+                      setState(() {
+                        _selectedLocation = point;
+                        _direccionController.text = "Ubicación en mapa (${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)})";
+                      });
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.tostaderia.app',
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: _selectedLocation,
+                          width: 50, height: 50,
+                          child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 15),
+            _buildInputContainer(
+              controller: _direccionController,
+              hint: "Calle, número, colonia...",
+              icon: Icons.map_outlined,
+            ),
+            const SizedBox(height: 10),
+            _buildInputContainer(
+              controller: _telefonoController,
+              hint: "Teléfono de contacto",
+              icon: Icons.phone,
+              isPhone: true,
+            ),
             
             const SizedBox(height: 30),
             
             Row(
               children: [
                 const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("3. ¿Cuándo podemos entregarte?", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text("Puedes marcar varios días o rangos.", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  ),
+                  child: Text("3. Horarios de entrega", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
                 TextButton.icon(
                   onPressed: _addDisponibilidad,
-                  icon: const Icon(Icons.add_circle_outline, color: AppColors.verdeBosque, size: 20),
+                  icon: const Icon(Icons.add_circle, color: AppColors.verdeBosque),
                   label: const Text("Añadir", style: TextStyle(color: AppColors.verdeBosque, fontWeight: FontWeight.bold)),
                 ),
               ],
@@ -201,6 +280,14 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
   }
 
   Widget _buildCartList() {
+    if (widget.cart.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        width: double.infinity,
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+        child: const Text("Tu carrito está vacío", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+      );
+    }
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
       child: Column(
@@ -217,27 +304,18 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     );
   }
 
-  Widget _buildAddressInput() {
+  Widget _buildInputContainer({required TextEditingController controller, required String hint, required IconData icon, bool isPhone = false}) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)]
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)]),
       child: TextField(
-        controller: _direccionController,
+        controller: controller,
+        keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
         style: const TextStyle(fontSize: 14),
-        maxLines: 2,
         decoration: InputDecoration(
-          hintText: "Calle, Número, Colonia...",
-          prefixIcon: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 15),
-            child: Icon(Icons.location_on, color: AppColors.verdeBosque, size: 28),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
+          hintText: hint,
+          prefixIcon: Icon(icon, color: AppColors.verdeBosque, size: 22),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.all(15),
         ),
       ),
     );
@@ -245,35 +323,20 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
 
   Widget _buildDisponibilidadList() {
     if (_disponibilidades.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: const Column(
-          children: [
-            Icon(Icons.event_available, color: Colors.grey, size: 40),
-            SizedBox(height: 10),
-            Text("Añade tus horarios disponibles arriba", style: TextStyle(color: Colors.grey, fontSize: 13)),
-          ],
-        ),
-      );
+      return const Text("No has añadido horarios todavía.", style: TextStyle(color: Colors.grey, fontSize: 13));
     }
     return Column(
       children: _disponibilidades.asMap().entries.map((entry) {
         return Card(
           elevation: 0,
-          margin: const EdgeInsets.only(bottom: 10),
-          color: Colors.green.shade50.withOpacity(0.5),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.green.shade100)),
+          color: Colors.green.shade50,
+          margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-            leading: const Icon(Icons.access_time_filled, color: AppColors.verdeBosque, size: 28),
-            title: Text(entry.value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            dense: true,
+            leading: const Icon(Icons.access_time, color: AppColors.verdeBosque),
+            title: Text(entry.value, style: const TextStyle(fontSize: 13)),
             trailing: IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 22),
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
               onPressed: () => setState(() => _disponibilidades.removeAt(entry.key)),
             ),
           ),
@@ -288,7 +351,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -296,9 +359,8 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Total Final a Pagar:", style: TextStyle(fontSize: 15, color: Colors.grey)),
-              Text("\$${_calculateTotal().toStringAsFixed(2)}", 
-                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)),
+              const Text("Total Final:", style: TextStyle(fontSize: 15, color: Colors.grey)),
+              Text("\$${_calculateTotal().toStringAsFixed(2)}", style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.verdeBosque)),
             ],
           ),
           const SizedBox(height: 15),
@@ -310,14 +372,10 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.verdeBosque, 
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                elevation: 0,
               ),
               child: _isSubmitting 
-                ? const SizedBox(
-                    width: 24, height: 24,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                  )
-                : const Text("CONFIRMAR Y ENVIAR PEDIDO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text("CONFIRMAR Y ENVIAR PEDIDO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -338,17 +396,16 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
             const SizedBox(height: 20),
             const Text("¡Pedido en Proceso!", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            const Text("Tu pedido se ha enviado, y se confirmará pronto", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 14)),
+            const Text("Tu pedido se ha enviado correctamente.", textAlign: TextAlign.center),
             const SizedBox(height: 25),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
+                  Navigator.pop(context); 
+                  Navigator.pop(context); 
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.verdeBosque, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                child: const Text("Perfecto", style: TextStyle(color: Colors.white)),
+                child: const Text("Perfecto"),
               ),
             ),
           ],

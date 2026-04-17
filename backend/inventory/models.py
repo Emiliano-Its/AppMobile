@@ -1,14 +1,10 @@
 from django.db import models
-
-# Create your models here.
-
 from django.conf import settings
 
 class RawMaterial(models.Model):
-    # Usamos CharField para el código de barras porque puede contener letras o ceros a la izquierda
     codigo_barras = models.CharField(max_length=100, unique=True, verbose_name="Código de Barras")
     nombre = models.CharField(max_length=100)
-    unidad_medida = models.CharField(max_length=20, help_text="Ej: Bulto 50kg, Litro, Caja")
+    unidad_medida = models.CharField(max_length=20, help_text="Ej: kg, Bulto, Litro")
     stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     precio_ultimo_ingreso = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     fecha_registro = models.DateTimeField(auto_now_add=True)
@@ -18,12 +14,14 @@ class RawMaterial(models.Model):
 
 class MovimientoInventario(models.Model):
     TIPO_CHOICES = [
-        ('ENTRADA', 'Entrada (Recepción)'),
-        ('SALIDA', 'Salida (Retiro de producción)'),
+        ('ENTRADA', 'Entrada (Compra)'),
+        ('SALIDA', 'Salida (Merma/Ajuste)'),
+        ('PRODUCCION', 'Salida para Producción'), # Necesario para estadísticas
     ]
     
-    RawMaterial = models.ForeignKey(RawMaterial, on_delete=models.CASCADE)
-    tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
+    # Se cambia a minúsculas para coincidir con el __str__
+    materia_prima = models.ForeignKey(RawMaterial, on_delete=models.CASCADE, related_name='movimientos')
+    tipo = models.CharField(max_length=15, choices=TIPO_CHOICES)
     cantidad = models.DecimalField(max_digits=10, decimal_places=2)
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT) 
     fecha = models.DateTimeField(auto_now_add=True)

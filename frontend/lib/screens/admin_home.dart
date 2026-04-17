@@ -1,171 +1,220 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
-import './admin_final_products.dart';
-import './admin_raw_material.dart';
 import './sales_personal.dart'; 
 import './customer_shop_screen.dart';
-// --- IMPORTACIÓN NUEVA ---
-import './admin_stats.dart'; 
+import './login.dart'; // <--- IMPORTANTE: Asegúrate de que este import sea correcto
 
-class AdminInventoryHub extends StatelessWidget {
+class AdminInventoryHub extends StatefulWidget {
   const AdminInventoryHub({super.key});
+
+  @override
+  State<AdminInventoryHub> createState() => _AdminInventoryHubState();
+}
+
+class _AdminInventoryHubState extends State<AdminInventoryHub> {
+  String _adminName = "Administrador";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminData();
+  }
+
+  Future<void> _loadAdminData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _adminName = prefs.getString('username') ?? "Administrador";
+    });
+  }
+
+  // --- FUNCIÓN CORREGIDA PARA CERRAR SESIÓN ---
+  void _cerrarSesion(BuildContext context) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false, // Esto elimina todas las pantallas previas de la memoria
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,
       appBar: AppBar(
-        title: const Text("Panel Administrativo", style: TextStyle(color: Colors.white)),
+        title: const Text("Panel de Control", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: AppColors.verdeBosque,
         elevation: 0,
         automaticallyImplyLeading: false, 
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () {
-              Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-            },
+      ),
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  _buildPremiumCard(
+                    context,
+                    title: "Gestión de Ventas",
+                    subtitle: "Historial, seguimiento y estados de pedidos activos.",
+                    icon: Icons.assignment_turned_in_rounded,
+                    colorAccent: Colors.blueGrey.shade600,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SalesPersonalScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  _buildPremiumCard(
+                    context,
+                    title: "Vista de Tienda",
+                    subtitle: "Previsualiza el catálogo tal como lo ven tus clientes.",
+                    icon: Icons.storefront_rounded, 
+                    colorAccent: Colors.blue.shade600,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const CustomerShopScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 40),
+                  _buildLogoutButton(context),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 30),
+      decoration: const BoxDecoration(
+        color: AppColors.verdeBosque,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            child: const CircleAvatar(
+              radius: 35,
+              backgroundColor: AppColors.fondoHueso,
+              child: Icon(Icons.bakery_dining_rounded, size: 40, color: AppColors.verdeBosque),
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Bienvenido de vuelta,", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                const SizedBox(height: 4),
+                Text(
+                  _adminName, 
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
+                  child: const Text("Nivel: Admin", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color colorAccent,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04), 
+            blurRadius: 15, 
+            offset: const Offset(0, 8)
           )
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            // --- NUEVA OPCIÓN: ESTADÍSTICAS ---
-            _buildLargeOption(
-              context,
-              title: "Estadísticas y Optimización",
-              subtitle: "Rendimiento, costos y utilidades netas",
-              icon: Icons.bar_chart_rounded,
-              color: Colors.teal.shade700, 
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AdminStatsScreen()),
-                );
-              },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(25),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: colorAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(icon, color: colorAccent, size: 32),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2D2D2D))),
+                      const SizedBox(height: 5),
+                      Text(subtitle, style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.3)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios_rounded, size: 18, color: Colors.grey.shade400),
+              ],
             ),
-            const SizedBox(height: 20),
-
-            _buildLargeOption(
-              context,
-              title: "Materias Primas",
-              subtitle: "Control de bultos, costos y stock actual",
-              icon: Icons.inventory_2_outlined,
-              color: AppColors.verdeBosque,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const RawMaterialScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-
-            _buildLargeOption(
-              context,
-              title: "Productos Finales",
-              subtitle: "Maneja el catálogo de Tostadas y paquetes",
-              icon: Icons.shopping_cart_checkout_rounded,
-              color: const Color(0xFFE8A400), 
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const FinalProductsScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-
-            _buildLargeOption(
-              context,
-              title: "Ventas y Ordenes",
-              subtitle: "Monitorea entregas y el historial de ventas",
-              icon: Icons.assignment_turned_in_rounded,
-              color: Colors.blue.shade700, 
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SalesPersonalScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-
-            _buildLargeOption(
-              context,
-              title: "Vista de Comprador",
-              subtitle: "Acceso a la tienda pública",
-              icon: Icons.storefront_rounded,
-              color: Colors.purple.shade600, 
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CustomerShopScreen()),
-                );
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildLargeOption(BuildContext context, {
-    required String title, 
-    required String subtitle, 
-    required IconData icon, 
-    required Color color,
-    required VoidCallback onTap
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(25),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05), 
-              blurRadius: 10, 
-              offset: const Offset(0, 4)
-            )
-          ],
+  Widget _buildLogoutButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 60,
+      child: OutlinedButton.icon(
+        icon: const Icon(Icons.logout_rounded, size: 24),
+        label: const Text("CERRAR SESIÓN SEGURA", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1)),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.red.shade700,
+          side: BorderSide(color: Colors.red.shade300, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.red.shade50,
         ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: color.withOpacity(0.1),
-              child: Icon(icon, color: color, size: 30),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title, 
-                    style: const TextStyle(
-                      fontSize: 18, 
-                      fontWeight: FontWeight.bold, 
-                      color: Color(0xFF1A1A1A) // Color de título sólido
-                    )
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle, 
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600)
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-          ],
-        ),
+        onPressed: () => _cerrarSesion(context),
       ),
     );
   }

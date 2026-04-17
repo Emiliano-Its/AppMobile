@@ -28,7 +28,7 @@ SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 
 # Agregué la IP de tu servidor Debian y localhost para pruebas
-ALLOWED_HOSTS = ['192.168.100.13', '10.0.2.2', 'localhost', '127.0.0.1', '10.75.167.248']
+ALLOWED_HOSTS = ['192.168.100.13', '10.0.2.2', 'localhost', '127.0.0.1', '10.75.167.248', '10.99.145.248']
 
 
 # Application definition
