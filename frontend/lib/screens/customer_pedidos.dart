@@ -229,7 +229,7 @@ Future<void> _fetchMisPedidos() async {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.verdeBosque))
-          : _misPedidos.isEmpty
+          : _misPedidos.where((p) => !_archivados.contains(p['id'])).isEmpty
               ? _buildEmptyState()
               : RefreshIndicator(
                   onRefresh: _fetchMisPedidos,

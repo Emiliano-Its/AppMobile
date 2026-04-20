@@ -685,25 +685,46 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
     try {
       final now = TimeOfDay.now();
       final nowMinutes = now.hour * 60 + now.minute;
-      // Formato: "1/5 (9:00 AM - 6:00 PM) | 2/5 (10:00 AM - 5:00 PM)"
+
       for (final bloque in horarios.split('|')) {
-        final match = RegExp(r'\((\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)').firstMatch(bloque);
-        if (match != null) {
-          int hStart = int.parse(match.group(1)!);
-          final mStart = int.parse(match.group(2)!);
-          final ampmStart = match.group(3)!;
-          int hEnd = int.parse(match.group(4)!);
-          final mEnd = int.parse(match.group(5)!);
-          final ampmEnd = match.group(6)!;
+        // Intenta formato 12h con AM/PM: "9:00 AM - 6:00 PM"
+        final match12 = RegExp(
+          r'\((\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)',
+          caseSensitive: false,
+        ).firstMatch(bloque);
 
-          if (ampmStart == 'PM' && hStart != 12) hStart += 12;
-          if (ampmStart == 'AM' && hStart == 12) hStart = 0;
-          if (ampmEnd == 'PM' && hEnd != 12) hEnd += 12;
-          if (ampmEnd == 'AM' && hEnd == 12) hEnd = 0;
+        if (match12 != null) {
+          int hS = int.parse(match12.group(1)!);
+          final mS = int.parse(match12.group(2)!);
+          final apS = match12.group(3)!.toUpperCase();
+          int hE = int.parse(match12.group(4)!);
+          final mE = int.parse(match12.group(5)!);
+          final apE = match12.group(6)!.toUpperCase();
 
-          final startMin = hStart * 60 + mStart;
-          final endMin = hEnd * 60 + mEnd;
+          if (apS == 'PM' && hS != 12) hS += 12;
+          if (apS == 'AM' && hS == 12) hS = 0;
+          if (apE == 'PM' && hE != 12) hE += 12;
+          if (apE == 'AM' && hE == 12) hE = 0;
 
+          final startMin = hS * 60 + mS;
+          final endMin   = hE * 60 + mE;
+          if (nowMinutes >= startMin && nowMinutes <= endMin) return false;
+          continue;
+        }
+
+        // Intenta formato 24h sin AM/PM: "9:00 - 18:00"
+        final match24 = RegExp(
+          r'\((\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\)',
+        ).firstMatch(bloque);
+
+        if (match24 != null) {
+          final hS = int.parse(match24.group(1)!);
+          final mS = int.parse(match24.group(2)!);
+          final hE = int.parse(match24.group(3)!);
+          final mE = int.parse(match24.group(4)!);
+
+          final startMin = hS * 60 + mS;
+          final endMin   = hE * 60 + mE;
           if (nowMinutes >= startMin && nowMinutes <= endMin) return false;
         }
       }
@@ -767,7 +788,7 @@ class _RutaEntregasScreenState extends State<RutaEntregasScreen> {
   final MapController _mapController = MapController();
 
   // Punto de origen: la tostadería (coordenadas desde ApiConfig o fijas)
-  static const LatLng _origen = LatLng(25.6866, -100.3161);
+  static const LatLng _origen = LatLng(25.6642525, -100.2398378);
 
   @override
   void initState() {
@@ -830,14 +851,26 @@ class _RutaEntregasScreenState extends State<RutaEntregasScreen> {
       final now = TimeOfDay.now();
       final nowMin = now.hour * 60 + now.minute;
       for (final bloque in horarios.split('|')) {
-        final m = RegExp(r'\((\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)').firstMatch(bloque);
-        if (m != null) {
-          int hs = int.parse(m.group(1)!); final ms = int.parse(m.group(2)!); final as_ = m.group(3)!;
-          int he = int.parse(m.group(4)!); final me = int.parse(m.group(5)!); final ae = m.group(6)!;
+        // Formato 12h con AM/PM
+        final m12 = RegExp(
+          r'\((\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)',
+          caseSensitive: false,
+        ).firstMatch(bloque);
+        if (m12 != null) {
+          int hs = int.parse(m12.group(1)!); final ms = int.parse(m12.group(2)!); final as_ = m12.group(3)!.toUpperCase();
+          int he = int.parse(m12.group(4)!); final me = int.parse(m12.group(5)!); final ae = m12.group(6)!.toUpperCase();
           if (as_ == 'PM' && hs != 12) hs += 12;
           if (as_ == 'AM' && hs == 12) hs = 0;
           if (ae == 'PM' && he != 12) he += 12;
           if (ae == 'AM' && he == 12) he = 0;
+          if (nowMin >= hs * 60 + ms && nowMin <= he * 60 + me) return Colors.green;
+          continue;
+        }
+        // Formato 24h sin AM/PM
+        final m24 = RegExp(r'\((\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\)').firstMatch(bloque);
+        if (m24 != null) {
+          final hs = int.parse(m24.group(1)!); final ms = int.parse(m24.group(2)!);
+          final he = int.parse(m24.group(3)!); final me = int.parse(m24.group(4)!);
           if (nowMin >= hs * 60 + ms && nowMin <= he * 60 + me) return Colors.green;
         }
       }
