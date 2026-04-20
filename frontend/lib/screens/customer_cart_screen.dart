@@ -177,7 +177,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       "cliente_nombre": username,
       "direccion_envio": _direccionController.text.trim(),
       "telefono_contacto": _telefonoController.text.trim(),
-      "fecha_entrega_estimada": _disponibilidades.join(" | "), 
+      "lat_entrega": _selectedLocation.latitude,
+      "lng_entrega": _selectedLocation.longitude,
+      "fecha_entrega_estimada": _disponibilidades.join(" | "),
       "total": _calculateTotal(),
       "estado": "PENDIENTE",
       "details": details

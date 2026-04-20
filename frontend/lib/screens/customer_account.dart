@@ -64,18 +64,58 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      // Cargamos el nombre y datos básicos guardados en el login
       _userName = prefs.getString('username') ?? "Usuario";
-      _userEmail = prefs.getString('email') ?? ""; 
+      _userEmail = prefs.getString('email') ?? "";
       _direccionController.text = prefs.getString('default_address') ?? '';
       _telefonoController.text = prefs.getString('default_phone') ?? '';
-      
+
       double? lat = prefs.getDouble('last_lat');
       double? lng = prefs.getDouble('last_lng');
       if (lat != null && lng != null) {
         _selectedLocation = LatLng(lat, lng);
       }
     });
+
+    // Si no hay datos locales, los pedimos al servidor
+    if (_direccionController.text.isEmpty && _telefonoController.text.isEmpty) {
+      await _loadProfileFromServer();
+    }
+  }
+
+  Future<void> _loadProfileFromServer() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('access_token') ?? '';
+      if (token.isEmpty) return;
+
+      final response = await http.get(
+        Uri.parse(ApiConfig.userProfile),
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final String dir = data['direccion'] ?? '';
+        final String tel = data['telefono'] ?? '';
+        final double? lat = data['latitud'] != null ? double.tryParse(data['latitud'].toString()) : null;
+        final double? lng = data['longitud'] != null ? double.tryParse(data['longitud'].toString()) : null;
+
+        if (mounted) {
+          setState(() {
+            if (dir.isNotEmpty) _direccionController.text = dir;
+            if (tel.isNotEmpty) _telefonoController.text = tel;
+            if (lat != null && lng != null) _selectedLocation = LatLng(lat, lng);
+          });
+          // Guardar localmente para la próxima vez
+          await prefs.setString('default_address', dir);
+          await prefs.setString('default_phone', tel);
+          if (lat != null) await prefs.setDouble('last_lat', lat);
+          if (lng != null) await prefs.setDouble('last_lng', lng);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error cargando perfil del servidor: $e");
+    }
   }
 
   Future<void> _saveProfileData() async {
@@ -254,17 +294,19 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                   
                   const Divider(),
 
-                  // BOTÓN CERRAR SESIÓN
                   ListTile(
                     leading: const Icon(Icons.exit_to_app, color: Colors.red),
                     title: const Text("Cerrar Sesión", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                     onTap: () async {
                       final prefs = await SharedPreferences.getInstance();
-                      await prefs.clear(); // Limpia token y datos
+                      // Solo borramos las claves de sesión, el resto se queda
+                      await prefs.remove('username');
+                      await prefs.remove('user_rol');
+                      await prefs.remove('access_token');
                       if (mounted) {
                         Navigator.pushAndRemoveUntil(
-                          context, 
-                          MaterialPageRoute(builder: (context) => const LoginScreen()), 
+                          context,
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
                           (route) => false,
                         );
                       }

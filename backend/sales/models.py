@@ -55,6 +55,9 @@ class Venta(models.Model):
     direccion_envio = models.TextField(blank=True, null=True)
     fecha_entrega_estimada = models.TextField(blank=True, null=True) 
     estado = models.CharField(max_length=20, choices=ESTADO_PEDIDO, default='PENDIENTE')
+    telefono_contacto = models.CharField(max_length=20, blank=True, null=True)
+    lat_entrega = models.FloatField(null=True, blank=True)
+    lng_entrega = models.FloatField(null=True, blank=True)
 
     def __str__(self):
         return f"Venta {self.id} - {self.tipo}"
@@ -87,3 +90,16 @@ class CorteCaja(models.Model):
     def __str__(self):
         estado = "Cerrada" if self.esta_cerrada else "Abierta"
         return f"Corte {self.fecha.strftime('%d/%m/%Y')} - {estado}"
+
+class MensajePedido(models.Model):
+    """Mensajes del vendedor al cliente sobre el estado de su pedido."""
+    venta = models.ForeignKey(Venta, related_name='mensajes', on_delete=models.CASCADE)
+    texto = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+    leido = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['fecha']
+
+    def __str__(self):
+        return f"Msg pedido #{self.venta_id}: {self.texto[:40]}"

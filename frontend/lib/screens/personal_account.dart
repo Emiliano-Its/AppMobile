@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import './login.dart';
-import './customer_change_pwd.dart'; // Reutilizamos la pantalla ya existente
+import './customer_change_pwd.dart';
 
 class PersonalAccountScreen extends StatefulWidget {
   const PersonalAccountScreen({super.key});
@@ -31,7 +31,10 @@ class _PersonalAccountScreenState extends State<PersonalAccountScreen> {
 
   Future<void> _cerrarSesion() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    // Solo borramos las claves de sesión, el resto se queda
+    await prefs.remove('username');
+    await prefs.remove('user_rol');
+    await prefs.remove('access_token');
     if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -41,121 +44,6 @@ class _PersonalAccountScreenState extends State<PersonalAccountScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.fondoHueso,
-      appBar: AppBar(
-        title: const Text(
-          "Mi Perfil",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: AppColors.verdeBosque,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // --- HEADER ---
-            Container(
-              color: AppColors.verdeBosque,
-              width: double.infinity,
-              padding: const EdgeInsets.only(bottom: 35, top: 15),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const CircleAvatar(
-                      radius: 45,
-                      backgroundColor: AppColors.fondoHueso,
-                      child: Icon(
-                        Icons.badge_rounded,
-                        size: 50,
-                        color: AppColors.verdeBosque,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  Text(
-                    _userName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      _userRol,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- SECCIÓN SEGURIDAD ---
-                  _buildSectionTitle("SEGURIDAD"),
-                  const SizedBox(height: 8),
-
-                  _buildOptionCard(
-                    icon: Icons.lock_reset_rounded,
-                    iconColor: AppColors.verdeBosque,
-                    title: "Cambiar Contraseña",
-                    subtitle: "Actualiza tu contraseña de acceso",
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CustomerChangePwdScreen(),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // --- SECCIÓN SESIÓN ---
-                  _buildSectionTitle("SESIÓN"),
-                  const SizedBox(height: 8),
-
-                  _buildOptionCard(
-                    icon: Icons.exit_to_app_rounded,
-                    iconColor: Colors.red.shade400,
-                    title: "Cerrar Sesión",
-                    subtitle: "Salir de forma segura de la aplicación",
-                    titleColor: Colors.red.shade600,
-                    onTap: () => _showLogoutDialog(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Diálogo de confirmación antes de cerrar sesión
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -181,21 +69,123 @@ class _PersonalAccountScreenState extends State<PersonalAccountScreen> {
               _cerrarSesion();
             },
             child: const Text("SALIR",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontWeight: FontWeight.bold,
-        color: AppColors.verdeBosque,
-        letterSpacing: 1.2,
-        fontSize: 12,
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.fondoHueso,
+      appBar: AppBar(
+        title: const Text(
+          "Mi Perfil",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: AppColors.verdeBosque,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Container(
+              color: AppColors.verdeBosque,
+              width: double.infinity,
+              padding: const EdgeInsets.only(bottom: 35, top: 15),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                        color: Colors.white, shape: BoxShape.circle),
+                    child: const CircleAvatar(
+                      radius: 45,
+                      backgroundColor: AppColors.fondoHueso,
+                      child: Icon(Icons.badge_rounded,
+                          size: 50, color: AppColors.verdeBosque),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    _userName,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                      _userRol,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 1),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "SEGURIDAD",
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.verdeBosque,
+                        letterSpacing: 1.2,
+                        fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildOptionCard(
+                    icon: Icons.lock_reset_rounded,
+                    iconColor: AppColors.verdeBosque,
+                    title: "Cambiar Contraseña",
+                    subtitle: "Actualiza tu contraseña de acceso",
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) =>
+                              const CustomerChangePwdScreen()),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  const Text(
+                    "SESIÓN",
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.verdeBosque,
+                        letterSpacing: 1.2,
+                        fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildOptionCard(
+                    icon: Icons.exit_to_app_rounded,
+                    iconColor: Colors.red.shade400,
+                    title: "Cerrar Sesión",
+                    subtitle: "Salir de forma segura de la aplicación",
+                    titleColor: Colors.red.shade600,
+                    onTap: _showLogoutDialog,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -214,10 +204,9 @@ class _PersonalAccountScreenState extends State<PersonalAccountScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
         ],
       ),
       child: Material(
@@ -232,9 +221,8 @@ class _PersonalAccountScreenState extends State<PersonalAccountScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      color: iconColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12)),
                   child: Icon(icon, color: iconColor, size: 24),
                 ),
                 const SizedBox(width: 16),
@@ -242,20 +230,15 @@ class _PersonalAccountScreenState extends State<PersonalAccountScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: titleColor ?? AppColors.tituloNegro,
-                        ),
-                      ),
+                      Text(title,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: titleColor ?? AppColors.tituloNegro)),
                       const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade500),
-                      ),
+                      Text(subtitle,
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500)),
                     ],
                   ),
                 ),
