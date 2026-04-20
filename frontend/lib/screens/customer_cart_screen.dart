@@ -46,6 +46,8 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     _loadStoredLocation();
   }
 
+  bool _isGeocodingAddress = false;
+
   // Carga las coordenadas guardadas previamente por el cliente
   Future<void> _loadStoredLocation() async {
     final prefs = await SharedPreferences.getInstance();
@@ -55,6 +57,31 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
       setState(() {
         _selectedLocation = LatLng(lat, lng);
       });
+    }
+  }
+
+  Future<void> _reverseGeocode(LatLng point) async {
+    setState(() => _isGeocodingAddress = true);
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse'
+        '?lat=${point.latitude}&lon=${point.longitude}'
+        '&format=json&accept-language=es',
+      );
+      final response = await http.get(url, headers: {
+        'User-Agent': 'TostaderiaApp/1.0 (contacto@tostaderia.com)',
+      });
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final String direccion = data['display_name'] ?? '';
+        if (direccion.isNotEmpty && mounted) {
+          setState(() => _direccionController.text = direccion);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error geocodificando: $e");
+    } finally {
+      if (mounted) setState(() => _isGeocodingAddress = false);
     }
   }
 
@@ -133,6 +160,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     setState(() => _isSubmitting = true);
     final prefs = await SharedPreferences.getInstance();
     final String username = prefs.getString('username') ?? "Cliente App";
+    final String token = prefs.getString('access_token') ?? '';
 
     final List<Map<String, dynamic>> details = [];
     widget.cart.forEach((id, qty) {
@@ -158,7 +186,7 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
     try {
       final response = await http.post(
         Uri.parse(ApiConfig.sales),
-        headers: ApiConfig.headers,
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
         body: jsonEncode(orderData),
       );
 
@@ -217,10 +245,8 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                     initialCenter: _selectedLocation,
                     initialZoom: 15.0,
                     onTap: (tapPosition, point) {
-                      setState(() {
-                        _selectedLocation = point;
-                        _direccionController.text = "Ubicación en mapa (${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)})";
-                      });
+                      setState(() => _selectedLocation = point);
+                      _reverseGeocode(point);
                     },
                   ),
                   children: [
@@ -242,7 +268,26 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
               ),
             ),
             
-            const SizedBox(height: 15),
+            const SizedBox(height: 8),
+
+            // Indicador cuando está obteniendo la dirección
+            if (_isGeocodingAddress)
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.verdeBosque),
+                  ),
+                  const SizedBox(width: 8),
+                  Text("Obteniendo dirección...",
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                ],
+              )
+            else
+              Text("Toca el mapa para marcar tu ubicación",
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+
+            const SizedBox(height: 10),
             _buildInputContainer(
               controller: _direccionController,
               hint: "Calle, número, colonia...",

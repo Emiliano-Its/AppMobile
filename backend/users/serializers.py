@@ -3,12 +3,16 @@ from django.contrib.auth.password_validation import validate_password
 from .models import CustomUser
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    password = serializers.CharField(
+        write_only=True, required=False, style={'input_type': 'password'}
+    )
 
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'password', 'rol', 'telefono', 'direccion']
-        
+        # is_active agregado para que el PATCH desde admin_users funcione
+        fields = ['id', 'username', 'email', 'password', 'rol',
+                  'telefono', 'direccion', 'is_active']
+
     def create(self, validated_data):
         user = CustomUser.objects.create_user(
             username=validated_data['username'],
@@ -16,7 +20,7 @@ class UserSerializer(serializers.ModelSerializer):
             password=validated_data['password'],
             rol=validated_data.get('rol', 'CLIENTE'),
             telefono=validated_data.get('telefono', ''),
-            direccion=validated_data.get('direccion', '')
+            direccion=validated_data.get('direccion', ''),
         )
         return user
 
@@ -29,12 +33,15 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
 class ChangePasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True, validators=[validate_password])
+    old_password     = serializers.CharField(required=True)
+    new_password     = serializers.CharField(required=True, validators=[validate_password])
     confirm_password = serializers.CharField(required=True)
 
     def validate(self, attrs):
         if attrs['new_password'] != attrs['confirm_password']:
-            raise serializers.ValidationError({"confirm_password": "Las nuevas contraseñas no coinciden."})
+            raise serializers.ValidationError(
+                {"confirm_password": "Las nuevas contraseñas no coinciden."}
+            )
         return attrs

@@ -221,8 +221,11 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _products.where((p) => 
-      p['nombre'].toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    final filtered = _products.where((p) =>
+      (p['activo'] == true) &&
+      ((p['stock_actual'] ?? 0) > 0) &&
+      p['nombre'].toLowerCase().contains(_searchQuery.toLowerCase())
+    ).toList();
 
     return Scaffold(
       backgroundColor: AppColors.fondoHueso,

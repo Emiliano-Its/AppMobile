@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Importaciones de tus constantes y pantallas
-import '../main.dart'; 
+import '../main.dart';
+
+// Pantallas ADMIN
 import './admin_stats.dart';
 import './admin_raw_material.dart';
-import './admin_final_products.dart'; 
-import './admin_home.dart'; 
+import './admin_final_products.dart';
+import './admin_home.dart';
+
+// Pantallas STAFF
+import './sales_personal.dart';
+import './personal_account.dart';
+
+// Pantallas CLIENTE
 import './customer_shop_screen.dart';
 import './customer_account.dart';
 import './customer_pedidos.dart';
@@ -20,7 +27,7 @@ class MainWrapper extends StatefulWidget {
 
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
-  String _userRol = 'CLIENTE'; 
+  String _userRol = 'CLIENTE';
   bool _isLoading = true;
 
   @override
@@ -31,46 +38,87 @@ class _MainWrapperState extends State<MainWrapper> {
 
   Future<void> _loadUserRole() async {
     final prefs = await SharedPreferences.getInstance();
+    final rol = (prefs.getString('user_rol') ?? 'CLIENTE').toUpperCase().trim();
     setState(() {
-      _userRol = (prefs.getString('user_rol') ?? 'CLIENTE').toUpperCase().trim();
+      _userRol = rol;
       _isLoading = false;
-      
-      // Si es ADMIN o STAFF, por defecto iniciamos en la pestaña del Panel (Home)
-      if (_userRol == 'ADMIN' || _userRol == 'STAFF') {
-        _currentIndex = 3; 
+
+      // Cada rol arranca en su tab principal
+      if (rol == 'ADMIN') {
+        _currentIndex = 3; // Panel de control (admin_home)
+      } else if (rol == 'STAFF') {
+        _currentIndex = 0; // Ventas
+      } else {
+        _currentIndex = 0; // Tienda
       }
     });
   }
 
-  // --- PANTALLAS PARA ADMIN ---
-  List<Widget> _getAdminScreens() {
-    return [
-      const AdminStatsScreen(),         // Tab 0
-      const FinalProductsScreen(),      // Tab 1
-      const RawMaterialScreen(),        // Tab 2
-      const AdminInventoryHub(),        // Tab 3 (El admin_home con los botones grandes)
-    ];
-  }
+  // ── ADMIN: Stats / Productos / Insumos / Panel ──────────────────────────
+  List<Widget> _getAdminScreens() => [
+    const AdminStatsScreen(),
+    const FinalProductsScreen(),
+    const RawMaterialScreen(),
+    const AdminInventoryHub(),
+  ];
 
-  // --- PANTALLAS PARA CLIENTE ---
-  List<Widget> _getCustomerScreens() {
-    return [
-      const CustomerShopScreen(),       // Tab 0
-      const CustomerPedidos(),          // Tab 1 (Nombre corregido)
-      const CustomerAccountScreen(),    // Tab 2
-    ];
-  }
+  List<BottomNavigationBarItem> _adminTabs() => const [
+    BottomNavigationBarItem(icon: Icon(Icons.analytics_rounded),     label: 'Stats'),
+    BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded),   label: 'Productos'),
+    BottomNavigationBarItem(icon: Icon(Icons.bakery_dining_rounded), label: 'Insumos'),
+    BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings_rounded), label: 'Panel'),
+  ];
+
+  // ── STAFF: Ventas / Mi Perfil ───────────────────────────────────────────
+  List<Widget> _getStaffScreens() => [
+    const SalesPersonalScreen(),
+    const PersonalAccountScreen(),
+  ];
+
+  List<BottomNavigationBarItem> _staffTabs() => const [
+    BottomNavigationBarItem(icon: Icon(Icons.point_of_sale_rounded),  label: 'Ventas'),
+    BottomNavigationBarItem(icon: Icon(Icons.manage_accounts_rounded), label: 'Mi Perfil'),
+  ];
+
+  // ── CLIENTE: Tienda / Pedidos / Perfil ──────────────────────────────────
+  List<Widget> _getCustomerScreens() => [
+    const CustomerShopScreen(),
+    CustomerPedidos(
+      onGoToShop: () => setState(() => _currentIndex = 0),
+    ),
+    const CustomerAccountScreen(),
+  ];
+
+  List<BottomNavigationBarItem> _customerTabs() => const [
+    BottomNavigationBarItem(icon: Icon(Icons.store_rounded),         label: 'Tienda'),
+    BottomNavigationBarItem(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
+    BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), label: 'Perfil'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.verdeBosque)),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.verdeBosque),
+        ),
       );
     }
 
-    bool isAdmin = (_userRol == 'ADMIN' || _userRol == 'STAFF');
-    final screens = isAdmin ? _getAdminScreens() : _getCustomerScreens();
+    final bool isAdmin  = _userRol == 'ADMIN';
+    final bool isStaff  = _userRol == 'STAFF';
+
+    final List<Widget> screens = isAdmin
+        ? _getAdminScreens()
+        : isStaff
+            ? _getStaffScreens()
+            : _getCustomerScreens();
+
+    final List<BottomNavigationBarItem> tabs = isAdmin
+        ? _adminTabs()
+        : isStaff
+            ? _staffTabs()
+            : _customerTabs();
 
     return Scaffold(
       body: IndexedStack(
@@ -79,38 +127,15 @@ class _MainWrapperState extends State<MainWrapper> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
+        onTap: (index) => setState(() => _currentIndex = index),
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
         selectedItemColor: AppColors.verdeBosque,
         unselectedItemColor: Colors.grey,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-        // Generamos los items de la barra según el rol
-        items: isAdmin ? _adminTabs() : _customerTabs(),
+        selectedLabelStyle:
+            const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        items: tabs,
       ),
     );
-  }
-
-  // --- TABS DEL ADMIN ---
-  List<BottomNavigationBarItem> _adminTabs() {
-    return const [
-      BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Stats'),
-      BottomNavigationBarItem(icon: Icon(Icons.inventory_2), label: 'Productos'),
-      BottomNavigationBarItem(icon: Icon(Icons.bakery_dining), label: 'Insumos'),
-      BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings), label: 'Home'),
-    ];
-  }
-
-  // --- TABS DEL CLIENTE ---
-  List<BottomNavigationBarItem> _customerTabs() {
-    return const [
-      BottomNavigationBarItem(icon: Icon(Icons.store_rounded), label: 'Tienda'),
-      BottomNavigationBarItem(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
-      BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
-    ];
   }
 }

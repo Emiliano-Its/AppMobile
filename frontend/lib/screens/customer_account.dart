@@ -32,6 +32,35 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     _loadSavedData();
   }
 
+  bool _isGeocodingAddress = false;
+
+  // Convierte coordenadas a dirección legible usando Nominatim (OSM, gratuito)
+  Future<void> _reverseGeocode(LatLng point) async {
+    setState(() => _isGeocodingAddress = true);
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse'
+        '?lat=${point.latitude}&lon=${point.longitude}'
+        '&format=json&accept-language=es',
+      );
+      final response = await http.get(url, headers: {
+        'User-Agent': 'TostaderiaApp/1.0 (contacto@tostaderia.com)',
+      });
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final String direccion = data['display_name'] ?? '';
+        if (direccion.isNotEmpty && mounted) {
+          setState(() => _direccionController.text = direccion);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error geocodificando: $e");
+    } finally {
+      if (mounted) setState(() => _isGeocodingAddress = false);
+    }
+  }
+
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -49,36 +78,37 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     });
   }
 
-Future<void> _saveProfileData() async {
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('access_token') ?? ''; // Recuperas el token del login
+  Future<void> _saveProfileData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token') ?? '';
 
-  final response = await http.post(
-    Uri.parse(ApiConfig.userProfile),
-    headers: {
-      ...ApiConfig.headers,
-      'Authorization': 'Token $token', // ESTO QUITA EL 401
-    },
-    body: jsonEncode({
-      'default_address': _direccionController.text,
-      'default_phone': _telefonoController.text,
-      'last_lat': _selectedLocation.latitude,
-      'last_lng': _selectedLocation.longitude,
-    }),
-  );
-
-  if (response.statusCode == 200 || response.statusCode == 201) {
-    // Si el server responde bien, guardas en local
-    await prefs.setString('default_address', _direccionController.text);
-    await prefs.setString('default_phone', _telefonoController.text);
-    await prefs.setDouble('last_lat', _selectedLocation.latitude);
-    await prefs.setDouble('last_lng', _selectedLocation.longitude);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Perfil actualizado")),
+    final response = await http.post(
+      Uri.parse(ApiConfig.userProfile),
+      headers: {
+        ...ApiConfig.headers,
+        'Authorization': 'Token $token',
+      },
+      body: jsonEncode({
+        'default_address': _direccionController.text,
+        'default_phone': _telefonoController.text,
+        'last_lat': _selectedLocation.latitude,
+        'last_lng': _selectedLocation.longitude,
+      }),
     );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      await prefs.setString('default_address', _direccionController.text);
+      await prefs.setString('default_phone', _telefonoController.text);
+      await prefs.setDouble('last_lat', _selectedLocation.latitude);
+      await prefs.setDouble('last_lng', _selectedLocation.longitude);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Perfil actualizado")),
+        );
+      }
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -141,11 +171,13 @@ Future<void> _saveProfileData() async {
                           initialZoom: 14.0,
                           onTap: (tapPosition, point) {
                             setState(() => _selectedLocation = point);
+                            _reverseGeocode(point);
                           },
                         ),
                         children: [
                           TileLayer(
                             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.tostaderia.app',
                           ),
                           MarkerLayer(
                             markers: [
@@ -162,8 +194,34 @@ Future<void> _saveProfileData() async {
                     ),
                   ),
                   
-                  const SizedBox(height: 20),
-                  
+                  const SizedBox(height: 8),
+
+                  // Indicador cuando está obteniendo la dirección del pin
+                  if (_isGeocodingAddress)
+                    Row(
+                      children: [
+                        const SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.verdeBosque,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          "Obteniendo dirección...",
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      "Toca el mapa para marcar tu ubicación",
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+
+                  const SizedBox(height: 12),
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(

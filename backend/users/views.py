@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
 from .serializers import UserSerializer, ChangePasswordSerializer
+from .models import CustomUser
 
 
 # --- VISTA PARA REGISTRO DE USUARIOS ---
@@ -21,7 +22,6 @@ class RegisterView(APIView):
                 "token": token.key,
                 "user": serializer.data
             }, status=status.HTTP_201_CREATED)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -34,9 +34,7 @@ class LoginView(APIView):
         password = request.data.get('password')
 
         if not username or not password:
-            return Response({
-                "error": "Por favor, proporcione usuario y contraseña"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Por favor, proporcione usuario y contraseña"}, status=status.HTTP_400_BAD_REQUEST)
 
         user = authenticate(username=username, password=password)
 
@@ -50,19 +48,12 @@ class LoginView(APIView):
                     "user": serializer.data
                 }, status=status.HTTP_200_OK)
             else:
-                return Response({
-                    "error": "Esta cuenta está desactivada"
-                }, status=status.HTTP_403_FORBIDDEN)
+                return Response({"error": "Esta cuenta está desactivada"}, status=status.HTTP_403_FORBIDDEN)
 
-        return Response({
-            "error": "Credenciales inválidas"
-        }, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"error": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 # --- VISTA PARA CAMBIO DE CONTRASEÑA ---
-# FIX CRÍTICO: Después de cambiar la contraseña, Django invalida el token
-# anterior. Aquí lo eliminamos y generamos uno nuevo para que Flutter
-# no reciba un 401 en las siguientes peticiones.
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -70,56 +61,100 @@ class ChangePasswordView(APIView):
         serializer = ChangePasswordSerializer(data=request.data)
         if serializer.is_valid():
             user = request.user
-
             if not user.check_password(serializer.data.get("old_password")):
-                return Response(
-                    {"error": "La contraseña actual es incorrecta."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({"error": "La contraseña actual es incorrecta."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Cambiar contraseña
             user.set_password(serializer.data.get("new_password"))
             user.save()
 
-            # --- REGENERAR TOKEN ---
-            # Eliminamos el token viejo (ya inválido tras set_password)
-            # y creamos uno nuevo para mantener la sesión activa en Flutter.
             Token.objects.filter(user=user).delete()
             new_token = Token.objects.create(user=user)
 
             return Response({
                 "message": "Contraseña actualizada exitosamente.",
-                "token": new_token.key  # Flutter debe guardar este nuevo token
+                "token": new_token.key
             }, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # --- VISTA PARA PERFIL DE USUARIO ---
-# Permite a Flutter guardar/actualizar dirección, teléfono y coordenadas GPS.
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Devuelve los datos actuales del perfil."""
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        """Actualiza dirección, teléfono y coordenadas del usuario."""
         user = request.user
-
-        # Solo actualizamos los campos que vengan en el body
         user.direccion = request.data.get('default_address', user.direccion)
-        user.telefono = request.data.get('default_phone', user.telefono)
-        user.latitud = request.data.get('last_lat', user.latitud)
-        user.longitud = request.data.get('last_lng', user.longitud)
+        user.telefono  = request.data.get('default_phone',   user.telefono)
+        user.latitud   = request.data.get('last_lat',        user.latitud)
+        user.longitud  = request.data.get('last_lng',        user.longitud)
         user.save()
+        return Response({"message": "Perfil actualizado correctamente."}, status=status.HTTP_200_OK)
 
-        return Response({
-            "message": "Perfil actualizado correctamente.",
-            "direccion": user.direccion,
-            "telefono": user.telefono,
-            "latitud": user.latitud,
-            "longitud": user.longitud,
-        }, status=status.HTTP_200_OK)
+
+# --- VISTA PARA LISTAR TODOS LOS USUARIOS (solo ADMIN/STAFF) ---
+class UserListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return user.rol in ('ADMIN', 'STAFF')
+
+    def get(self, request):
+        if not self._es_admin(request.user):
+            return Response({"error": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+        usuarios = CustomUser.objects.all().order_by('date_joined')
+        return Response(UserSerializer(usuarios, many=True).data, status=status.HTTP_200_OK)
+
+
+# --- VISTA PARA EDITAR UN USUARIO POR ID (solo ADMIN/STAFF) ---
+class UserDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return user.rol in ('ADMIN', 'STAFF')
+
+    def get_object(self, pk):
+        try:
+            return CustomUser.objects.get(pk=pk)
+        except CustomUser.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        if not self._es_admin(request.user):
+            return Response({"error": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+        usuario = self.get_object(pk)
+        if not usuario:
+            return Response({"error": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(UserSerializer(usuario).data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        if not self._es_admin(request.user):
+            return Response({"error": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+        usuario = self.get_object(pk)
+        if not usuario:
+            return Response({"error": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        for campo in ['rol', 'is_active', 'telefono', 'direccion']:
+            if campo in request.data:
+                setattr(usuario, campo, request.data[campo])
+        usuario.save()
+
+        return Response(UserSerializer(usuario).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        if not self._es_admin(request.user):
+            return Response({"error": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+        usuario = self.get_object(pk)
+        if not usuario:
+            return Response({"error": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        # Evitar que el admin se elimine a sí mismo
+        if usuario.pk == request.user.pk:
+            return Response(
+                {"error": "No puedes eliminar tu propia cuenta."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        usuario.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

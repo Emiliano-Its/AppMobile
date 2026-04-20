@@ -50,15 +50,20 @@ class SaleViewSet(viewsets.ModelViewSet):
     serializer_class = SaleSerializer
 
     def perform_create(self, serializer):
-        # Asignación automática del vendedor
+        from django.utils import timezone
+        extra = {}
+        # Las ventas de mostrador se cobran en el momento, registramos fecha_cobro ya
+        if self.request.data.get('tipo') == 'LOCAL':
+            extra['fecha_cobro'] = timezone.now()
+
         if self.request.user.is_authenticated:
-            serializer.save(usuario_vendedor=self.request.user)
+            serializer.save(usuario_vendedor=self.request.user, **extra)
         else:
             admin = User.objects.filter(is_superuser=True).first()
             if admin:
-                serializer.save(usuario_vendedor=admin)
+                serializer.save(usuario_vendedor=admin, **extra)
             else:
-                serializer.save()
+                serializer.save(**extra)
 
     def get_queryset(self):
         queryset = Venta.objects.all().order_by('-fecha')
@@ -102,8 +107,10 @@ class SaleViewSet(viewsets.ModelViewSet):
         if venta.tipo != 'ENTREGA':
             return Response({'error': 'Solo se pueden cobrar pedidos en entrega'}, status=status.HTTP_400_BAD_REQUEST)
         
+        from django.utils import timezone
         venta.tipo = 'LOCAL'
         venta.estado = 'ENTREGADO'
+        venta.fecha_cobro = timezone.now()  # Fecha real del cobro
         venta.save()
         return Response({'status': 'Pedido cobrado y finalizado'})
 

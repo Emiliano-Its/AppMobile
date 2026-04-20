@@ -6,7 +6,9 @@ import '../main.dart';
 import '../api_config.dart'; // Importación agregada
 
 class CustomerPedidos extends StatefulWidget {
-  const CustomerPedidos({super.key});
+  final VoidCallback? onGoToShop;
+
+  const CustomerPedidos({super.key, this.onGoToShop});
 
   @override
   State<CustomerPedidos> createState() => _CustomerPedidosState();
@@ -129,7 +131,15 @@ Future<void> _fetchMisPedidos() async {
               style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                // Si hay callback (viene del MainWrapper), lo usamos.
+                // Si no, intentamos pop solo si hay pantalla previa.
+                if (widget.onGoToShop != null) {
+                  widget.onGoToShop!();
+                } else if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.verdeBosque,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))

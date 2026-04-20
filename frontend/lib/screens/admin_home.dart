@@ -3,7 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import './sales_personal.dart'; 
 import './customer_shop_screen.dart';
-import './login.dart'; // <--- IMPORTANTE: Asegúrate de que este import sea correcto
+import './login.dart';
+import './admin_users.dart'; // Nueva pantalla de gestión de usuarios
 
 class AdminInventoryHub extends StatefulWidget {
   const AdminInventoryHub({super.key});
@@ -80,6 +81,20 @@ class _AdminInventoryHubState extends State<AdminInventoryHub> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const CustomerShopScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  _buildPremiumCard(
+                    context,
+                    title: "Gestión de Usuarios",
+                    subtitle: "Ver, editar roles y administrar cuentas registradas.",
+                    icon: Icons.manage_accounts_rounded,
+                    colorAccent: Colors.deepPurple.shade400,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AdminUsersScreen()),
                       );
                     },
                   ),

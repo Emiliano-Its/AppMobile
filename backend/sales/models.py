@@ -47,6 +47,7 @@ class Venta(models.Model):
         ('EN_CAMINO', 'En Camino'), ('ENTREGADO', 'Entregado'), ('RECHAZADO', 'Rechazado'),
     ]
     fecha = models.DateTimeField(auto_now_add=True)
+    fecha_cobro = models.DateTimeField(null=True, blank=True)  # Se llena al cobrar
     tipo = models.CharField(max_length=10, choices=TIPO_VENTA)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     usuario_vendedor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True)

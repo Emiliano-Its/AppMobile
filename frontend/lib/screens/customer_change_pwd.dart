@@ -69,9 +69,30 @@ class _CustomerChangePwdScreenState extends State<CustomerChangePwdScreen> {
       } else if (response.statusCode == 401) {
         _showSnackBar("Sesión no autorizada. Re-inicia sesión.", Colors.red);
       } else {
-        final error = jsonDecode(response.body);
-        final msg = error['error'] ?? "Verifica tu contraseña actual";
-        _showSnackBar("Error: $msg", Colors.red);
+        // Django puede devolver el error como string simple, lista o mapa anidado.
+        // {"error": "..."} | {"new_password": ["muy corta", "muy común"]}
+        try {
+          final error = jsonDecode(response.body);
+          String msg = "Error desconocido";
+          if (error is Map) {
+            if (error.containsKey('error')) {
+              msg = error['error'].toString();
+            } else {
+              final parts = <String>[];
+              error.forEach((key, value) {
+                if (value is List) {
+                  parts.addAll(value.map((e) => e.toString()));
+                } else {
+                  parts.add(value.toString());
+                }
+              });
+              msg = parts.join('\n');
+            }
+          }
+          _showSnackBar(msg, Colors.red);
+        } catch (_) {
+          _showSnackBar("Error al procesar la respuesta.", Colors.red);
+        }
       }
     } catch (e) {
       _showSnackBar("Error de conexión", Colors.red);

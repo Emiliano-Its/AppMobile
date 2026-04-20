@@ -29,7 +29,8 @@ class SaleSerializer(serializers.ModelSerializer):
         model = Venta
         fields = [
             'id', 
-            'fecha', 
+            'fecha',
+            'fecha_cobro',
             'tipo', 
             'total', 
             'usuario_vendedor', 

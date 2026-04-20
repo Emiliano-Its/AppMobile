@@ -300,8 +300,14 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
   
   final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
   var request = http.MultipartRequest(isEditing ? 'PUT' : 'POST', url);
-  
-  request.headers.addAll(ApiConfig.headers);
+
+  // Leer token y agregarlo al header de autorización
+  final prefs = await SharedPreferences.getInstance();
+  final String token = prefs.getString('access_token') ?? '';
+  request.headers.addAll({
+    ...ApiConfig.headers,
+    'Authorization': 'Token $token',
+  });
 
   // Agregamos los campos de texto
   request.fields['nombre'] = name;
