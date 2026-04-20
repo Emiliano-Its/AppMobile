@@ -52,16 +52,22 @@ class _LoginScreenState extends State<LoginScreen> {
         final String rol = (userData['rol'] ?? "CLIENTE").toString().toUpperCase().trim(); 
         final String username = userData['username'] ?? "Usuario";
         
-        // 4. Guardar sesión
+        // --- EXTRAER EL TOKEN DEL SERVIDOR ---
+        final String token = data['token'] ?? data['access'] ?? "";
+        
+        // 4. Guardar sesión completa en SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('username', username);
         await prefs.setString('user_rol', rol);
+        
+        // ESTA LÍNEA ES LA QUE PERMITE QUE EL CAMBIO DE CONTRASEÑA NO MARQUE 401
+        await prefs.setString('access_token', token);
 
         if (!mounted) return;
         
         _showSnackBar("¡Bienvenido, $username!", AppColors.verdeBosque);
 
-        // 5. NAVEGACIÓN AL WRAPPER (Él decide qué mostrar según el rol)
+        // 5. NAVEGACIÓN AL WRAPPER
         Navigator.pushAndRemoveUntil(
             context, 
             MaterialPageRoute(builder: (context) => const MainWrapper()),

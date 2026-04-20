@@ -23,42 +23,47 @@ class _CustomerPedidosState extends State<CustomerPedidos> {
     _fetchMisPedidos();
   }
 
-  Future<void> _fetchMisPedidos() async {
+Future<void> _fetchMisPedidos() async {
     if (mounted) setState(() => _isLoading = true);
 
     final prefs = await SharedPreferences.getInstance();
     _username = (prefs.getString('username') ?? "").trim();
+    // SACAMOS EL TOKEN PARA QUE EL SERVER NO NOS REBOTE
+    final token = prefs.getString('access_token') ?? '';
 
     try {
-      // --- CAMBIO 1: Usamos ApiConfig.sales y agregamos el timestamp para evitar caché ---
       final url = Uri.parse('${ApiConfig.sales}?t=${DateTime.now().millisecondsSinceEpoch}');
       
-      // --- CAMBIO 2: Usamos las cabeceras centralizadas ---
-      final response = await http.get(url, headers: ApiConfig.headers);
+      // AGREGAMOS EL AUTHORIZATION HEADER
+      final response = await http.get(
+        url, 
+        headers: {
+          ...ApiConfig.headers,
+          'Authorization': 'Token $token',
+        },
+      );
       
       if (response.statusCode == 200) {
         List<dynamic> data = json.decode(response.body);
         
         if (mounted) {
           setState(() {
-            // Filtrado por el nombre de usuario guardado en el teléfono
             _misPedidos = data.where((p) {
-              String clienteJson = (p['cliente_nombre'] ?? "").toString().trim().toUpperCase();
-              return clienteJson == _username.toUpperCase();
+              return p['cliente_nombre'].toString().trim().toLowerCase() == _username.toLowerCase();
             }).toList();
-
-            _misPedidos.sort((a, b) => (b['id'] ?? 0).compareTo(a['id'] ?? 0));
             _isLoading = false;
           });
         }
+      } else {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          print("Error del servidor: ${response.statusCode}");
+        }
       }
     } catch (e) {
-      debugPrint("Error cargando pedidos desde Debian: $e");
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Error al conectar con el servidor de la tostadería")),
-        );
+        print("Error de conexión: $e");
       }
     }
   }

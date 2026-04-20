@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; 
 import '../api_config.dart'; 
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -31,10 +32,11 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
   Future<void> _fetchProducts() async {
     setState(() => _isLoading = true);
     try {
-      // --- CAMBIO 2: Petición limpia al servidor Debian ---
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       final response = await http.get(
         Uri.parse(_productsUrl),
-        headers: ApiConfig.headers,
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
       );
       
       if (response.statusCode == 200) {
@@ -101,10 +103,11 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
     };
 
     try {
-      // --- CAMBIO 3: Post usando ApiConfig para evitar IPs fijas ---
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       final response = await http.post(
         Uri.parse(_salesUrl),
-        headers: ApiConfig.headers,
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
         body: json.encode(saleData),
       );
 

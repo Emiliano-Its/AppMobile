@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_map/flutter_map.dart'; // Librería gratuita
-import 'package:latlong2/latlong.dart'; // Para manejo de coordenadas
+import 'package:flutter_map/flutter_map.dart'; 
+import 'package:latlong2/latlong.dart'; 
 import '../main.dart';
 import './login.dart';
-import './customer_pedidos.dart'; // Importación para la pantalla de pedidos
+import './customer_change_pwd.dart'; 
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../api_config.dart';
 
 class CustomerAccountScreen extends StatefulWidget {
   const CustomerAccountScreen({super.key});
@@ -16,8 +19,10 @@ class CustomerAccountScreen extends StatefulWidget {
 class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
   final _direccionController = TextEditingController();
   final _telefonoController = TextEditingController();
+  String _userName = "Usuario";
+  String _userEmail = ""; // Añadido para mostrar más info si gustas
   
-  // Coordenadas iniciales (Monterrey como ejemplo, cámbialas a tu zona)
+  // Coordenadas iniciales (Monterrey)
   LatLng _selectedLocation = const LatLng(25.6866, -100.3161); 
   final MapController _mapController = MapController();
 
@@ -30,10 +35,12 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
+      // Cargamos el nombre y datos básicos guardados en el login
+      _userName = prefs.getString('username') ?? "Usuario";
+      _userEmail = prefs.getString('email') ?? ""; 
       _direccionController.text = prefs.getString('default_address') ?? '';
       _telefonoController.text = prefs.getString('default_phone') ?? '';
       
-      // Intentar cargar coordenadas guardadas
       double? lat = prefs.getDouble('last_lat');
       double? lng = prefs.getDouble('last_lng');
       if (lat != null && lng != null) {
@@ -42,20 +49,36 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     });
   }
 
-  Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
+Future<void> _saveProfileData() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('access_token') ?? ''; // Recuperas el token del login
+
+  final response = await http.post(
+    Uri.parse(ApiConfig.userProfile),
+    headers: {
+      ...ApiConfig.headers,
+      'Authorization': 'Token $token', // ESTO QUITA EL 401
+    },
+    body: jsonEncode({
+      'default_address': _direccionController.text,
+      'default_phone': _telefonoController.text,
+      'last_lat': _selectedLocation.latitude,
+      'last_lng': _selectedLocation.longitude,
+    }),
+  );
+
+  if (response.statusCode == 200 || response.statusCode == 201) {
+    // Si el server responde bien, guardas en local
     await prefs.setString('default_address', _direccionController.text);
     await prefs.setString('default_phone', _telefonoController.text);
-    // Guardamos coordenadas para persistencia
     await prefs.setDouble('last_lat', _selectedLocation.latitude);
     await prefs.setDouble('last_lng', _selectedLocation.longitude);
     
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Datos actualizados para tus envíos")),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Perfil actualizado")),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -64,119 +87,127 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
       appBar: AppBar(
         title: const Text("Mi Cuenta", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.verdeBosque,
-        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const CircleAvatar(
-              radius: 40,
-              backgroundColor: AppColors.verdeBosque,
-              child: Icon(Icons.person, size: 40, color: Colors.white),
-            ),
-            const SizedBox(height: 20),
-            
-            _buildSectionTitle("Ubicación de Envío (Toca el mapa)"),
-            
-            // MAPA GRATUITO (OPEN STREET MAP)
+            // Header del perfil
             Container(
-              height: 250,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: AppColors.verdeBosque, width: 2),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(13),
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _selectedLocation,
-                    initialZoom: 15.0,
-                    onTap: (tapPosition, point) {
-                      setState(() {
-                        _selectedLocation = point;
-                        // Actualizamos el texto con las coordenadas
-                        _direccionController.text = "Ubicación en mapa (${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)})";
-                      });
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.tostaderia.app',
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _selectedLocation,
-                          width: 80,
-                          height: 80,
-                          child: const Icon(Icons.location_on, color: Colors.red, size: 40),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 15),
-            _buildTextField("Detalles de dirección (Calle, No, Colonia)", _direccionController, Icons.home),
-            _buildTextField("Teléfono de contacto", _telefonoController, Icons.phone),
-            
-            SizedBox(
+              color: AppColors.verdeBosque,
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saveData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.verdeBosque,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
-                ),
-                child: const Text("GUARDAR DATOS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-            ),
-
-            const Divider(height: 40),
-
-            // SECCIÓN DE OPCIONES DE CUENTA Y PEDIDOS
-            _buildSectionTitle("Gestión de Cuenta"),
-            
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              padding: const EdgeInsets.only(bottom: 30, top: 10),
               child: Column(
                 children: [
+                  const CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.person, size: 60, color: AppColors.verdeBosque),
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    _userName,
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  if (_userEmail.isNotEmpty)
+                    Text(_userEmail, style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  _buildSectionTitle("DATOS DE ENVÍO"),
+                  _buildTextField("Dirección", _direccionController, Icons.location_on),
+                  _buildTextField("Teléfono", _telefonoController, Icons.phone),
+                  
+                  const SizedBox(height: 10),
+                  
+                  // Mapa para ubicación
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: _selectedLocation,
+                          initialZoom: 14.0,
+                          onTap: (tapPosition, point) {
+                            setState(() => _selectedLocation = point);
+                          },
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: _selectedLocation,
+                                width: 80,
+                                height: 80,
+                                child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _saveProfileData,
+                      icon: const Icon(Icons.save, color: Colors.white),
+                      label: const Text("GUARDAR CAMBIOS", style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.verdeBosque,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 30),
+                  _buildSectionTitle("SEGURIDAD Y SESIÓN"),
+                  
+                  // BOTÓN CAMBIAR CONTRASEÑA
                   ListTile(
-                    leading: const Icon(Icons.shopping_bag_outlined, color: AppColors.verdeBosque),
-                    title: const Text("Mis Pedidos"),
-                    subtitle: const Text("Ver el historial y estado de mis compras"),
+                    leading: const Icon(Icons.lock_outline, color: AppColors.verdeBosque),
+                    title: const Text("Cambiar Contraseña"),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
                       Navigator.push(
-                        context, 
-                        MaterialPageRoute(builder: (context) => const CustomerPedidos())
+                        context,
+                        MaterialPageRoute(builder: (context) => const CustomerChangePwdScreen()),
                       );
                     },
                   ),
-                  const Divider(height: 1),
+                  
+                  const Divider(),
+
+                  // BOTÓN CERRAR SESIÓN
                   ListTile(
-                    leading: const Icon(Icons.lock_reset, color: AppColors.verdeBosque),
-                    title: const Text("Cambiar Contraseña"),
-                    onTap: () { /* Lógica de pass */ },
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.logout, color: Colors.red),
-                    title: const Text("Cerrar Sesión", style: TextStyle(color: Colors.red)),
+                    leading: const Icon(Icons.exit_to_app, color: Colors.red),
+                    title: const Text("Cerrar Sesión", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                     onTap: () async {
                       final prefs = await SharedPreferences.getInstance();
-                      await prefs.clear();
+                      await prefs.clear(); // Limpia token y datos
                       if (mounted) {
                         Navigator.pushAndRemoveUntil(
                           context, 
                           MaterialPageRoute(builder: (context) => const LoginScreen()), 
-                          (route) => false
+                          (route) => false,
                         );
                       }
                     },
@@ -195,7 +226,10 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.verdeBosque))
+        child: Text(
+          title, 
+          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.verdeBosque, letterSpacing: 1.2)
+        )
       ),
     );
   }
@@ -208,7 +242,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, color: AppColors.verdeBosque),
-          border: const OutlineInputBorder(),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
           filled: true,
           fillColor: Colors.white,
         ),

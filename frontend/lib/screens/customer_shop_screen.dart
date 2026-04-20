@@ -42,9 +42,15 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   Future<void> _fetchProducts() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
+
       final response = await http.get(
         Uri.parse(_productsUrl),
-        headers: ApiConfig.headers,
+        headers: {
+          ...ApiConfig.headers,
+          'Authorization': 'Token $token',
+        },
       );
       
       if (response.statusCode == 200) {
@@ -138,9 +144,18 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
               },
             )
           : null,
-        title: const Text(
-          "Tostadería el Molino", 
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Tostadería el Molino",
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+            ),
+            Text(
+              "Hola, $_userName",
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
         ),
         backgroundColor: AppColors.verdeBosque,
         iconTheme: const IconThemeData(color: Colors.white),

@@ -3,8 +3,9 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; 
-import '../api_config.dart'; // Importación vital agregada
+import '../api_config.dart';
 
 class CorteCajaScreen extends StatefulWidget {
   const CorteCajaScreen({super.key});
@@ -31,8 +32,12 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
   Future<void> _fetchSales() async {
     setState(() => _isLoading = true);
     try {
-      // --- CAMBIO 2: Petición limpia usando la URL centralizada ---
-      final response = await http.get(Uri.parse(_baseSalesUrl));
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
+      final response = await http.get(
+        Uri.parse(_baseSalesUrl),
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
+      );
       if (response.statusCode == 200) {
         setState(() {
           _allSales = json.decode(response.body);

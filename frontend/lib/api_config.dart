@@ -1,13 +1,10 @@
 class ApiConfig {
-  // 1. IP de tu servidor Debian
+  // 1. IP de tu servidor Debian (Asegúrate de que sea la correcta en tu red actual)
   static const String serverIp = "192.168.100.13"; 
   static const String port = "8000";
 
-  // --- NUEVA BASE PARA MEDIOS ---
-  // Las imágenes NO están dentro de /api/, están en la raíz del servidor
+  // --- BASE PARA MEDIOS Y API ---
   static const String serverBase = "http://$serverIp:$port";
-
-  // 2. BASE URL para la API
   static const String baseUrl = "$serverBase/api";
 
   // --- ENDPOINTS ---
@@ -16,6 +13,10 @@ class ApiConfig {
   static const String searchByCode = "${products}buscar_por_codigo/";
   static const String rawMaterials = "$baseUrl/raw-materials/";
   static const String sales = "$baseUrl/sales/";
+  
+  // Endpoint para el cambio de contraseña (Seguridad)
+  static const String changePassword = "$baseUrl/users/change-password/";
+  static const String userProfile = "$baseUrl/users/profile/";
 
   // --- CONFIGURACIÓN DE CABECERAS ---
   static Map<String, String> get headers => {
@@ -23,16 +24,14 @@ class ApiConfig {
     'Accept': 'application/json',
   };
 
-  // --- FUNCIÓN DE UTILIDAD PARA IMÁGENES ---
-  // Esta función evita el error 404 al asegurar que la URL sea completa y correcta
+  // --- FUNCIÓN PARA GESTIONAR URL DE IMÁGENES ---
   static String getImageUrl(String? urlPath) {
     if (urlPath == null || urlPath.isEmpty) return "";
     
-    // Si Django ya manda la URL completa (con http), la usamos tal cual
+    // Si la URL ya es completa (empieza con http), se usa tal cual
     if (urlPath.startsWith('http')) return urlPath;
     
-    // Si viene relativa (/media/productos/...), le pegamos la IP del servidor
-    // Aseguramos que no haya doble diagonal si urlPath ya trae una al inicio
+    // Si es una ruta relativa, se concatena con la base del servidor
     final cleanPath = urlPath.startsWith('/') ? urlPath : '/$urlPath';
     return "$serverBase$cleanPath";
   }

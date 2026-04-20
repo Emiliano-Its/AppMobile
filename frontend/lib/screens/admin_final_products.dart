@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../main.dart'; 
 import '../api_config.dart';
-import 'dart:io'; // Para manejar el archivo de la imagen
-import 'package:image_picker/image_picker.dart'; // Para abrir la galería o cámara
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:http_parser/http_parser.dart';
 
 class FinalProductsScreen extends StatefulWidget {
@@ -115,9 +116,11 @@ Future<void> _abrirEscanerParaSumar() async {
   // --- CORRECCIÓN 2: Búsqueda usando ApiConfig.searchByCode ---
 Future<void> _buscarYSumarStock(String codigo) async {
   try {
+    final prefs = await SharedPreferences.getInstance();
+    final String token = prefs.getString('access_token') ?? '';
     final response = await http.get(
       Uri.parse('${ApiConfig.searchByCode}?codigo=$codigo'),
-      headers: ApiConfig.headers
+      headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
     );
 
     if (response.statusCode == 200) {
@@ -262,7 +265,12 @@ void _mostrarDialogoConfirmarRegistro(String codigo) {
   // --- OBTENER PRODUCTOS ---
   Future<void> _fetchProductos() async {
     try {
-      final response = await http.get(Uri.parse(apiUrl), headers: ApiConfig.headers);
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
+      );
       if (response.statusCode == 200) {
         setState(() {
           _allProducts = json.decode(response.body);
@@ -332,9 +340,11 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
   // --- TOGGLE ACTIVO ---
   Future<void> _toggleProductStatus(int id) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       final response = await http.post(
         Uri.parse('$apiUrl$id/toggle_active/'),
-        headers: ApiConfig.headers
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
       );
       if (response.statusCode == 200) {
         _fetchProductos();
@@ -348,9 +358,11 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
   // --- ELIMINAR PERMANENTE ---
   Future<void> _deleteProduct(int id) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       final response = await http.delete(
         Uri.parse('$apiUrl$id/'),
-        headers: ApiConfig.headers
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
       );
       if (response.statusCode == 204) {
         _fetchProductos();

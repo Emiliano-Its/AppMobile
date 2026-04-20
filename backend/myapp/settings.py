@@ -134,9 +134,13 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Tell Django to use model of user i created
 AUTH_USER_MODEL = 'users.CustomUser'
 
-# Configuración básica de REST Framework (opcional, por si necesitas permisos)
+# Configuración básica de REST Framework 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
     ],
 }

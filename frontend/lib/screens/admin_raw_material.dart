@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:mobile_scanner/mobile_scanner.dart'; // Librería solicitada
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../main.dart'; 
 import '../api_config.dart';
 
@@ -23,10 +24,14 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
     _fetchInsumos();
   }
 
-  // --- 1. OBTENER INSUMOS DESDE DEBIAN ---
   Future<void> _fetchInsumos() async {
     try {
-      final response = await http.get(Uri.parse(apiUrl));
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
+      );
       if (response.statusCode == 200) {
         setState(() {
           insumos = json.decode(response.body);
@@ -39,7 +44,6 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
     }
   }
 
-  // --- 2. GUARDAR O ACTUALIZAR (API CALL) ---
   Future<void> _saveInsumo({
     required String name,
     required String code,
@@ -61,9 +65,13 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
     };
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
+      final authHeaders = {...ApiConfig.headers, 'Authorization': 'Token $token'};
+
       final response = isEditing
-          ? await http.put(url, headers: ApiConfig.headers, body: jsonEncode(data))
-          : await http.post(url, headers: ApiConfig.headers, body: jsonEncode(data));
+          ? await http.put(url, headers: authHeaders, body: jsonEncode(data))
+          : await http.post(url, headers: authHeaders, body: jsonEncode(data));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         if (mounted && !fromScanner) Navigator.pop(context); 

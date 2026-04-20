@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; 
-import '../api_config.dart'; // Importación esencial agregada
+import '../api_config.dart';
 import 'local_sales_personal.dart'; 
 import 'corte_caja.dart';
 
@@ -30,9 +31,11 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
   Future<void> _refreshAll() async {
     if (mounted) setState(() => _isLoading = true);
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       await Future.wait([
-        _fetchPendingOrders(),
-        _fetchInProcessOrders(),
+        _fetchPendingOrders(token),
+        _fetchInProcessOrders(token),
       ]);
     } catch (e) {
       _showSnackBar("Error al actualizar datos desde el servidor", Colors.red);
@@ -41,21 +44,20 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
     }
   }
 
-  Future<void> _fetchPendingOrders() async {
-    // Usamos las cabeceras centralizadas
+  Future<void> _fetchPendingOrders(String token) async {
     final response = await http.get(
-      Uri.parse('$_baseSalesUrl?tipo=PEDIDO'), 
-      headers: ApiConfig.headers
+      Uri.parse('$_baseSalesUrl?tipo=PEDIDO'),
+      headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
     );
     if (response.statusCode == 200) {
       setState(() => _pendingOrders = json.decode(response.body));
     }
   }
 
-  Future<void> _fetchInProcessOrders() async {
+  Future<void> _fetchInProcessOrders(String token) async {
     final response = await http.get(
       Uri.parse('$_baseSalesUrl?tipo=ENTREGA'),
-      headers: ApiConfig.headers
+      headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
     );
     if (response.statusCode == 200) {
       setState(() => _inProcessOrders = json.decode(response.body));
@@ -66,10 +68,11 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
   Future<void> _processOrder(dynamic order) async {
     final int id = order['id'];
     try {
-      // --- CAMBIO 2: Endpoint dinámico para aceptar pedido ---
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       final response = await http.post(
         Uri.parse('$_baseSalesUrl$id/aceptar_pedido/'),
-        headers: ApiConfig.headers
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
       );
       
       if (response.statusCode == 200) {
@@ -87,10 +90,11 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
   // Cobrar pedido (Pasa de ENTREGA a LOCAL/FINALIZADO)
   Future<void> _cobrarPedidoEntrega(int id) async {
     try {
-      // --- CAMBIO 3: Endpoint dinámico para cobrar entrega ---
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       final response = await http.post(
         Uri.parse('$_baseSalesUrl$id/cobrar_entrega/'),
-        headers: ApiConfig.headers
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
       );
       
       if (response.statusCode == 200) {
@@ -106,9 +110,11 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
 
   Future<void> _deleteOrder(int id) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final String token = prefs.getString('access_token') ?? '';
       final response = await http.delete(
         Uri.parse('$_baseSalesUrl$id/'),
-        headers: ApiConfig.headers
+        headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
       );
       if (response.statusCode == 204) {
         _refreshAll();
