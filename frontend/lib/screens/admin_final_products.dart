@@ -32,10 +32,9 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
 
   // --- ESCANEAR PARA SUMAR (CORREGIDO CON FILTRO DE ESTABILIDAD) ---
 Future<void> _abrirEscanerParaSumar() async {
-  // 1. Configuramos el controlador con máxima precisión
   final MobileScannerController scannerController = MobileScannerController(
-    formats: [BarcodeFormat.ean13, BarcodeFormat.ean8], // ÚNICOS formatos permitidos
-    detectionSpeed: DetectionSpeed.normal, // 'normal' es más preciso que 'noDuplicates' para evitar basura
+    formats: [BarcodeFormat.ean13, BarcodeFormat.ean8],
+    detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
     torchEnabled: false,
   );
@@ -47,6 +46,7 @@ Future<void> _abrirEscanerParaSumar() async {
         appBar: AppBar(
           title: const Text("Escaneando Producto", style: TextStyle(color: Colors.white)),
           backgroundColor: AppColors.verdeBosque,
+          iconTheme: const IconThemeData(color: Colors.white),
         ),
         body: Stack(
           children: [
@@ -56,29 +56,19 @@ Future<void> _abrirEscanerParaSumar() async {
                 final List<Barcode> barcodes = capture.barcodes;
                 for (final barcode in barcodes) {
                   final String? rawValue = barcode.rawValue;
-                  
-                  // 2. FILTRO ESTRICTO: Solo aceptamos si tiene 13 dígitos (como tu imagen)
-                  // o 8 dígitos (EAN-8). Cualquier otra cosa se ignora.
                   if (rawValue != null && (rawValue.length == 13 || rawValue.length == 8)) {
-                    
-                    // Verificamos que sean solo números para evitar errores de interpretación
                     if (RegExp(r'^[0-9]+$').hasMatch(rawValue)) {
-                      debugPrint("¡Código Válido Detectado!: $rawValue");
-                      
-                      // Cerramos y liberamos recursos
-                      scannerController.dispose();
+                      // Solo pop, dispose se hace después del await
                       Navigator.pop(context, rawValue);
-                      break; // Salimos del bucle
+                      break;
                     }
                   }
                 }
               },
             ),
-            // Guía visual: El recuadro ayuda a que el usuario no mueva tanto el cel
             Center(
               child: Container(
-                width: 280,
-                height: 150,
+                width: 280, height: 150,
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.greenAccent, width: 3),
                   borderRadius: BorderRadius.circular(15),
@@ -86,17 +76,15 @@ Future<void> _abrirEscanerParaSumar() async {
               ),
             ),
             const Positioned(
-              bottom: 80,
-              left: 0,
-              right: 0,
+              bottom: 80, left: 0, right: 0,
               child: Text(
-                "Enfoca el código de barras dentro del rectangulo",
+                "Enfoca el código de barras dentro del rectángulo",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white, 
+                  color: Colors.white,
                   backgroundColor: Colors.black87,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -106,8 +94,10 @@ Future<void> _abrirEscanerParaSumar() async {
     ),
   );
 
-  // Limpieza por si el usuario regresa con el botón de "atrás"
+  // Dispose SIEMPRE aquí, una sola vez
   scannerController.dispose();
+
+  if (!mounted) return;
 
   if (codigoDetectado != null) {
     _buscarYSumarStock(codigoDetectado);
@@ -295,13 +285,12 @@ void _mostrarDialogoConfirmarRegistro(String codigo) {
 
   // --- CORRECCIÓN 3: Guardar con Headers y URL corregida ---
 // --- MODIFICACIÓN: Agregamos el parámetro bool isActive ---
-Future<void> _saveProduct(String name, String code, String price, String stock, bool isEditing, bool isActive, {int? id}) async {
+Future<void> _saveProduct(String name, String code, String price, String stock, bool isEditing, bool isActive, {int? id, bool deleteImage = false}) async {
   setState(() => _isLoading = true);
-  
+
   final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
   var request = http.MultipartRequest(isEditing ? 'PUT' : 'POST', url);
 
-  // Leer token y agregarlo al header de autorización
   final prefs = await SharedPreferences.getInstance();
   final String token = prefs.getString('access_token') ?? '';
   request.headers.addAll({
@@ -309,20 +298,22 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
     'Authorization': 'Token $token',
   });
 
-  // Agregamos los campos de texto
   request.fields['nombre'] = name;
   request.fields['codigo_barras'] = code;
   request.fields['precio_venta'] = price;
   request.fields['stock_actual'] = stock;
-  // --- ESTA ES LA CLAVE: Enviamos el estado de activo ---
-  request.fields['activo'] = isActive.toString(); 
+  request.fields['activo'] = isActive.toString();
 
   if (_imageFile != null) {
+    // Subir nueva imagen
     request.files.add(await http.MultipartFile.fromPath(
       'imagen',
       _imageFile!.path,
       contentType: MediaType('image', 'jpeg'),
     ));
+  } else if (deleteImage && isEditing) {
+    // Indicarle a Django que borre la imagen existente
+    request.fields['imagen'] = '';
   }
 
   try {
@@ -330,7 +321,7 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      _fetchProductos(); 
+      _fetchProductos();
       _showSnackBar("¡Producto guardado con éxito!", Colors.green);
       _imageFile = null;
     } else {
@@ -476,38 +467,112 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
   }
 
   Widget _buildProductCard(dynamic item) {
-    bool estaActivo = item['activo'] ?? true;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Opacity(
-        opacity: estaActivo ? 1.0 : 0.6,
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(12),
-          leading: CircleAvatar(
-            backgroundColor: estaActivo ? AppColors.verdeBosque.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-            child: Icon(
-              estaActivo ? Icons.bakery_dining : Icons.visibility_off_outlined, 
-              color: estaActivo ? AppColors.verdeBosque : Colors.grey
+    final bool estaActivo = item['activo'] ?? true;
+    final int stock = item['stock_actual'] ?? 0;
+    final bool stockBajo = stock > 0 && stock < 5;
+    final bool sinStock  = stock == 0;
+    final Color stockColor = sinStock ? Colors.red : stockBajo ? Colors.orange : AppColors.verdeBosque;
+
+    return Opacity(
+      opacity: estaActivo ? 1.0 : 0.55,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.withOpacity(0.12)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showFormDialog(producto: item),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                // Imagen o ícono
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 60, height: 60,
+                    color: Colors.grey.shade100,
+                    child: item['imagen'] != null
+                        ? Image.network(
+                            ApiConfig.getImageUrl(item['imagen']),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.bakery_dining_rounded, size: 30, color: Colors.orange),
+                          )
+                        : const Icon(Icons.bakery_dining_rounded, size: 30, color: Colors.orange),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(item['nombre'],
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          if (!estaActivo)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text("pausado", style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text("\$${item['precio_venta']}",
+                        style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.verdeBosque, fontSize: 14)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.inventory_2_rounded, size: 13, color: stockColor),
+                          const SizedBox(width: 4),
+                          Text("$stock uds",
+                            style: TextStyle(fontSize: 12, color: stockColor, fontWeight: FontWeight.w500)),
+                          if (sinStock || stockBajo) ...[
+                            const SizedBox(width: 6),
+                            Text(sinStock ? "· Sin stock" : "· Stock bajo",
+                              style: TextStyle(fontSize: 11, color: stockColor)),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Acciones
+                Column(
+                  children: [
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: Icon(
+                        estaActivo ? Icons.pause_circle_rounded : Icons.play_circle_rounded,
+                        color: estaActivo ? Colors.orange : Colors.green,
+                        size: 26,
+                      ),
+                      onPressed: () => _toggleProductStatus(item['id']),
+                    ),
+                    const SizedBox(height: 8),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                      onPressed: () => _confirmDelete(item['id'], item['nombre']),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          title: Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text("Stock: ${item['stock_actual']} | \$${item['precio_venta']}"),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(estaActivo ? Icons.check_circle : Icons.pause_circle_outline, 
-                color: estaActivo ? Colors.green : Colors.orange),
-                onPressed: () => _toggleProductStatus(item['id']),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                onPressed: () => _confirmDelete(item['id'], item['nombre']),
-              ),
-            ],
-          ),
-          onTap: () => _showFormDialog(producto: item),
         ),
       ),
     );
@@ -519,6 +584,7 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
   
   // Si no estamos editando, limpiamos la imagen seleccionada previamente
   if (!isEditing) _imageFile = null;
+  bool deleteImage = false;
 
   final nombreCtrl = TextEditingController(text: isEditing ? producto['nombre'] : '');
   final codigoCtrl = TextEditingController(
@@ -549,43 +615,85 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
               const SizedBox(height: 20),
 
               // --- SECCIÓN DE IMAGEN ---
-              GestureDetector(
-                onTap: () async {
-                  await _pickImage(); // Función que abre la galería
-                  setModalState(() {}); // Refresca la vista previa dentro del modal
-                },
-                child: Container(
-                  height: 130,
-                  width: 130,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.verdeBosque.withOpacity(0.3), width: 2),
-                  ),
-                  child: _imageFile != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: Image.file(_imageFile!, fit: BoxFit.cover),
-                        )
-                      : (isEditing && producto['imagen'] != null)
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(18),
-                              child: Image.network(
-                                producto['imagen'], // URL que viene de Django
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => 
-                                    const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+              StatefulBuilder(
+                builder: (context, setImageState) {
+                  final bool tieneImagen = _imageFile != null ||
+                      (isEditing && producto['imagen'] != null && !deleteImage);
+                  return Column(
+                    children: [
+                      Stack(
+                        children: [
+                          GestureDetector(
+                            onTap: () async {
+                              await _pickImage();
+                              setImageState(() { deleteImage = false; });
+                              setModalState(() {});
+                            },
+                            child: Container(
+                              height: 130, width: 130,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppColors.verdeBosque.withOpacity(0.3), width: 2),
                               ),
-                            )
-                          : const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_a_photo, size: 40, color: AppColors.verdeBosque),
-                                SizedBox(height: 5),
-                                Text("Subir foto", style: TextStyle(fontSize: 12, color: AppColors.verdeBosque)),
-                              ],
+                              child: _imageFile != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(18),
+                                      child: Image.file(_imageFile!, fit: BoxFit.cover),
+                                    )
+                                  : (isEditing && producto['imagen'] != null && !deleteImage)
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(18),
+                                          child: Image.network(
+                                            ApiConfig.getImageUrl(producto['imagen']),
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                                          ),
+                                        )
+                                      : const Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.add_a_photo, size: 40, color: AppColors.verdeBosque),
+                                            SizedBox(height: 5),
+                                            Text("Subir foto", style: TextStyle(fontSize: 12, color: AppColors.verdeBosque)),
+                                          ],
+                                        ),
                             ),
-                ),
+                          ),
+                          // Botón X para borrar imagen
+                          if (tieneImagen)
+                            Positioned(
+                              top: 0, right: 0,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setImageState(() {
+                                    _imageFile = null;
+                                    deleteImage = true;
+                                  });
+                                  setModalState(() {});
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 16),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (tieneImagen)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text("Toca para cambiar · X para borrar",
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                        ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 25),
 
@@ -619,9 +727,9 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
                         precioCtrl.text,
                         stockCtrl.text,
                         isEditing,
-                        // --- PASAMOS EL ESTADO ACTUAL O TRUE SI ES NUEVO ---
-                        isEditing ? (producto['activo'] ?? true) : true, 
+                        isEditing ? (producto['activo'] ?? true) : true,
                         id: isEditing ? producto['id'] : null,
+                        deleteImage: deleteImage,
                       );
                       Navigator.pop(context);
                     } else {

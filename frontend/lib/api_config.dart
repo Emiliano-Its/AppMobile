@@ -12,6 +12,7 @@ class ApiConfig {
   static const String products = "$baseUrl/FinalProduct/";
   static const String searchByCode = "${products}buscar_por_codigo/";
   static const String rawMaterials = "$baseUrl/raw-materials/";
+  static const String inventoryMovements = "$baseUrl/inventory-movements/";
   static const String sales = "$baseUrl/sales/";
   
   // Endpoint para el cambio de contraseña (Seguridad)

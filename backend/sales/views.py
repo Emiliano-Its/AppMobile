@@ -193,54 +193,89 @@ class POSProductViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = FinalProductSerializer
 
 # --- ENDPOINT DE ESTADÍSTICAS PARA ADMIN ---
+
+# --- ENDPOINT DE ESTADÍSTICAS PARA ADMIN ---
 class StatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from django.utils import timezone
-        from django.db.models import Sum, Count, Avg, F
+        from django.db.models import Sum, Count, Avg, F, Q
         from datetime import timedelta
+        from inventory.models import RawMaterial, MovimientoInventario
+        from .models import DetalleVenta
 
-        hoy = timezone.now().date()
-        hace_30 = hoy - timedelta(days=30)
-        hace_7  = hoy - timedelta(days=7)
+        hoy    = timezone.now().date()
+        # Período según parámetro: semana / mes / año (default: mes)
+        periodo = request.query_params.get('periodo', 'mes')
+        if periodo == 'semana':
+            desde = hoy - timedelta(days=7)
+        elif periodo == 'año':
+            desde = hoy.replace(month=1, day=1)
+        else:  # mes
+            desde = hoy - timedelta(days=30)
 
-        # ── VENTAS ──────────────────────────────────────────────────────────
-        ventas_qs = Venta.objects.filter(estado='ENTREGADO')
+        hace_7 = hoy - timedelta(days=7)
 
-        # Totales generales
-        total_mes    = ventas_qs.filter(fecha_cobro__date__gte=hace_30).aggregate(t=Sum('total'))['t'] or 0
-        total_semana = ventas_qs.filter(fecha_cobro__date__gte=hace_7).aggregate(t=Sum('total'))['t'] or 0
-        total_hoy    = ventas_qs.filter(fecha_cobro__date=hoy).aggregate(t=Sum('total'))['t'] or 0
+        # ── VENTAS COBRADAS ──────────────────────────────────────────────────
+        # Usamos fecha_cobro si existe, sino fecha (para ventas antiguas sin fecha_cobro)
+        from django.db.models import Q
+        ventas_qs = Venta.objects.filter(
+            estado='ENTREGADO'
+        ).filter(
+            Q(fecha_cobro__date__gte=desde) | Q(fecha_cobro__isnull=True, fecha__date__gte=desde)
+        )
 
-        # Pedidos completados vs cancelados (últimos 30 días)
-        pedidos_30  = Venta.objects.filter(fecha__date__gte=hace_30, tipo__in=['PEDIDO','ENTREGA'])
-        completados = pedidos_30.filter(estado='ENTREGADO').count()
-        cancelados  = pedidos_30.filter(estado='RECHAZADO').count()
-        pendientes  = pedidos_30.filter(estado='PENDIENTE').count()
+        total_periodo = ventas_qs.aggregate(t=Sum('total'))['t'] or 0
+        total_hoy = Venta.objects.filter(
+            estado='ENTREGADO'
+        ).filter(
+            Q(fecha_cobro__date=hoy) | Q(fecha_cobro__isnull=True, fecha__date=hoy)
+        ).aggregate(t=Sum('total'))['t'] or 0
+        ticket_prom = ventas_qs.aggregate(avg=Avg('total'))['avg'] or 0
 
-        # Ventas por día (últimos 7 días) para la gráfica de línea
+        # Ventas por día (últimos 7 días)
         ventas_por_dia = []
         for i in range(6, -1, -1):
             dia = hoy - timedelta(days=i)
-            total_dia = ventas_qs.filter(fecha_cobro__date=dia).aggregate(t=Sum('total'))['t'] or 0
-            ventas_por_dia.append({
-                'dia': dia.strftime('%d/%m'),
-                'total': float(total_dia)
-            })
+            t = Venta.objects.filter(estado='ENTREGADO').filter(
+                Q(fecha_cobro__date=dia) | Q(fecha_cobro__isnull=True, fecha__date=dia)
+            ).aggregate(t=Sum('total'))['t'] or 0
+            ventas_por_dia.append({'dia': dia.strftime('%d/%m'), 'total': round(float(t), 2)})
 
-        # ── PRODUCTOS ───────────────────────────────────────────────────────
-        # Top 5 productos más vendidos (últimos 30 días)
-        from .models import DetalleVenta
-        top_productos = (
+        # ── ESTADO DE PEDIDOS ────────────────────────────────────────────────
+        todos_periodo = Venta.objects.filter(fecha__date__gte=desde)
+
+        # Solo contamos pedidos reales (no ventas de mostrador LOCAL)
+        completados = todos_periodo.filter(estado='ENTREGADO', tipo='LOCAL').exclude(cliente_nombre='Venta Mostrador').count()
+        # Ventas mostrador también son "entregadas" pero las separamos
+        mostrador   = todos_periodo.filter(estado='ENTREGADO', cliente_nombre='Venta Mostrador').count()
+        pendientes  = todos_periodo.filter(estado='PENDIENTE', tipo='PEDIDO').count()
+        cancelados  = todos_periodo.filter(estado='RECHAZADO').count()
+        en_camino   = todos_periodo.filter(estado='ACEPTADO').count()
+        # Total entregados = cobrados a domicilio + mostrador
+        completados = completados + mostrador
+
+        # ── TOP PRODUCTOS ────────────────────────────────────────────────────
+        top_productos = list(
             DetalleVenta.objects
-            .filter(venta__fecha_cobro__date__gte=hace_30, venta__estado='ENTREGADO')
+            .filter(venta__estado='ENTREGADO')
+            .filter(
+                Q(venta__fecha_cobro__date__gte=desde) |
+                Q(venta__fecha_cobro__isnull=True, venta__fecha__date__gte=desde)
+            )
             .values('producto__nombre')
-            .annotate(total_vendido=Sum('cantidad'), ingreso=Sum(F('cantidad') * F('precio_unitario')))
+            .annotate(
+                total_vendido=Sum('cantidad'),
+                ingreso=Sum(F('cantidad') * F('precio_unitario'))
+            )
             .order_by('-total_vendido')[:5]
         )
+        for p in top_productos:
+            if p['ingreso'] is not None:
+                p['ingreso'] = round(float(p['ingreso']), 2)
 
-        # Productos con stock bajo (menos de 10 unidades y activos)
+        # ── STOCK BAJO ───────────────────────────────────────────────────────
         stock_bajo = list(
             FinalProduct.objects
             .filter(activo=True, stock_actual__lt=10)
@@ -249,14 +284,10 @@ class StatsView(APIView):
         )
 
         # ── CLIENTES ────────────────────────────────────────────────────────
-        total_clientes = Venta.objects.filter(
-            tipo='PEDIDO'
-        ).values('cliente_nombre').distinct().count()
-
-        # Cliente más frecuente del mes
+        total_clientes = Venta.objects.exclude(cliente_nombre='Venta Mostrador').values('cliente_nombre').distinct().count()
         cliente_top = (
             Venta.objects
-            .filter(fecha__date__gte=hace_30, estado='ENTREGADO')
+            .filter(fecha__date__gte=desde, estado='ENTREGADO')
             .exclude(cliente_nombre='Venta Mostrador')
             .values('cliente_nombre')
             .annotate(pedidos=Count('id'))
@@ -264,133 +295,77 @@ class StatsView(APIView):
             .first()
         )
 
-        # Ticket promedio
-        ticket_prom = ventas_qs.filter(
-            fecha_cobro__date__gte=hace_30
-        ).aggregate(avg=Avg('total'))['avg'] or 0
-
-        # ── MATERIA PRIMA ────────────────────────────────────────────────────
-        from inventory.models import RawMaterial
-        from .models import RegistroProduccion
-
-        # Inventario actual de materias primas
-        materias = list(
-            RawMaterial.objects.values('nombre', 'stock_actual', 'unidad_medida', 'precio_ultimo_ingreso')
-            .order_by('stock_actual')
-        )
-
-        # Rendimiento del mes: paquetes producidos por kg/unidad de insumo
-        registros_mes = RegistroProduccion.objects.filter(fecha__date__gte=hace_30)
-
-        rendimiento_mes = list(
-            registros_mes
-            .values('materia_prima__nombre', 'materia_prima__unidad_medida')
-            .annotate(
-                total_insumo=Sum('cantidad_insumo_usada'),
-                total_paquetes=Sum('cantidad_paquetes_producidos'),
-                costo_total=Sum('costo_insumo_momento'),
-                rendimiento_prom=Avg('rendimiento_calculado'),
-            )
-            .order_by('-total_paquetes')
-        )
-
-        # Convertir Decimal a float para JSON
-        for r in rendimiento_mes:
-            for k in ['total_insumo', 'costo_total', 'rendimiento_prom']:
-                if r[k] is not None:
-                    r[k] = round(float(r[k]), 2)
-
-        for m in materias:
-            for k in ['stock_actual', 'precio_ultimo_ingreso']:
-                if m[k] is not None:
-                    m[k] = float(m[k])
-
-        # Histórico semanal de producción (últimas 4 semanas)
-        produccion_semanal = []
-        for i in range(3, -1, -1):
-            inicio = hoy - timedelta(days=(i + 1) * 7)
-            fin    = hoy - timedelta(days=i * 7)
-            paq = RegistroProduccion.objects.filter(
-                fecha__date__gte=inicio, fecha__date__lt=fin
-            ).aggregate(t=Sum('cantidad_paquetes_producidos'))['t'] or 0
-            produccion_semanal.append({
-                'semana': f"S-{i}" if i > 0 else "Esta",
-                'paquetes': int(paq),
+        # ── INVENTARIO MATERIA PRIMA ─────────────────────────────────────────
+        materias = []
+        for mp in RawMaterial.objects.all().order_by('stock_actual'):
+            stock = float(mp.stock_actual)
+            precio = float(mp.precio_ultimo_ingreso)
+            materias.append({
+                'nombre': mp.nombre,
+                # Entero si no tiene decimales
+                'stock_actual': int(stock) if stock == int(stock) else round(stock, 2),
+                'unidad_medida': mp.unidad_medida,
+                'precio_ultimo_ingreso': round(precio, 2),
             })
 
-        # ── CONSEJO DE OPTIMIZACIÓN ─────────────────────────────────────────
-        consejo = self._generar_consejo(
-            total_semana, total_mes, cancelados, completados,
-            stock_bajo, ticket_prom, rendimiento_mes, materias
-        )
+        # ── RENDIMIENTO POR MATERIA PRIMA ────────────────────────────────────
+        # Usa MovimientoInventario si existen, si no muestra solo entradas/salidas del stock
+        rendimiento_mp = []
+        total_ventas_periodo = float(total_periodo)
+
+        for mp in RawMaterial.objects.all():
+            entradas = MovimientoInventario.objects.filter(
+                materia_prima=mp, tipo='ENTRADA', fecha__date__gte=desde
+            ).aggregate(t=Sum('cantidad'))['t'] or 0
+
+            salidas = MovimientoInventario.objects.filter(
+                materia_prima=mp, tipo__in=['SALIDA', 'PRODUCCION'], fecha__date__gte=desde
+            ).aggregate(t=Sum('cantidad'))['t'] or 0
+
+            entrada_f = float(entradas)
+            salida_f  = float(salidas)
+            stock_f   = float(mp.stock_actual)
+            precio_f  = float(mp.precio_ultimo_ingreso)
+
+            # Si hay movimientos registrados, calcular rendimiento real
+            # Si no, mostrar de todas formas con datos de stock e inversión estimada
+            costo_entrada = round(entrada_f * precio_f, 2) if entrada_f > 0 else 0
+
+            # Rendimiento: $ ventas / unidades usadas (salidas)
+            rendimiento = round(total_ventas_periodo / salida_f, 2) if salida_f > 0 else None
+
+            # Siempre incluir la materia prima si tiene stock o tuvo movimientos
+            if entrada_f > 0 or salida_f > 0 or stock_f > 0:
+                rendimiento_mp.append({
+                    'nombre': mp.nombre,
+                    'unidad': mp.unidad_medida,
+                    'entradas': int(entrada_f) if entrada_f == int(entrada_f) else round(entrada_f, 2),
+                    'salidas':  int(salida_f)  if salida_f  == int(salida_f)  else round(salida_f, 2),
+                    'stock_actual': int(stock_f) if stock_f == int(stock_f) else round(stock_f, 2),
+                    'costo_entrada': costo_entrada,
+                    'rendimiento_por_unidad': rendimiento,
+                })
 
         return Response({
-            # Resumen financiero
-            'total_hoy':    round(float(total_hoy), 2),
-            'total_semana': round(float(total_semana), 2),
-            'total_mes':    round(float(total_mes), 2),
-            'ticket_prom':  round(float(ticket_prom), 2),
-
-            # Estado de pedidos
-            'completados': completados,
-            'cancelados':  cancelados,
-            'pendientes':  pendientes,
-
-            # Gráfica de línea
+            'periodo': periodo,
+            # Financiero
+            'total_hoy':     round(float(total_hoy), 2),
+            'total_periodo': round(float(total_periodo), 2),
+            'ticket_prom':   round(float(ticket_prom), 2),
+            # Gráfica
             'ventas_por_dia': ventas_por_dia,
-
+            # Pedidos
+            'completados': completados,
+            'pendientes':  pendientes,
+            'cancelados':  cancelados,
+            'en_camino':   en_camino,
             # Productos
-            'top_productos': list(top_productos),
+            'top_productos': top_productos,
             'stock_bajo':    stock_bajo,
-
             # Clientes
             'total_clientes': total_clientes,
             'cliente_top':    cliente_top,
-
             # Materia prima
-            'materias_primas':    materias,
-            'rendimiento_mes':    rendimiento_mes,
-            'produccion_semanal': produccion_semanal,
-
-            # Consejo
-            'consejo': consejo,
+            'materias_primas':  materias,
+            'rendimiento_mp':   rendimiento_mp,
         })
-
-    def _generar_consejo(self, semana, mes, cancelados, completados, stock_bajo, ticket, rendimiento_mes=None, materias=None):
-        semana = float(semana)
-        mes    = float(mes)
-        ticket = float(ticket)
-        consejos = []
-
-        tasa_cancel = (cancelados / max(completados + cancelados, 1)) * 100
-        if tasa_cancel > 20:
-            consejos.append(f"Tu tasa de cancelación es {tasa_cancel:.0f}%. Considera confirmar disponibilidad con los clientes antes de aceptar pedidos.")
-
-        if stock_bajo:
-            nombres = ', '.join([p['nombre'] for p in stock_bajo[:2]])
-            consejos.append(f"Stock bajo en: {nombres}. Reabastecer pronto para no perder ventas.")
-
-        if ticket < 100:
-            consejos.append("El ticket promedio es bajo. Ofrecer combos o promociones puede aumentar el valor por pedido.")
-
-        if semana > 0 and mes > 0:
-            prom_semanal_esperado = mes / 4
-            if semana < prom_semanal_esperado * 0.7:
-                consejos.append("Esta semana las ventas están por debajo del promedio mensual. Buen momento para promocionar en redes.")
-
-        # Consejos de materia prima
-        if rendimiento_mes:
-            for r in rendimiento_mes:
-                rend = r.get('rendimiento_prom') or 0
-                if rend > 0 and rend < 2.0:
-                    consejos.append(f"El rendimiento de {r['materia_prima__nombre']} es bajo ({rend:.1f} paq/unidad). Revisa el proceso de producción.")
-
-        if materias:
-            sin_stock = [m for m in materias if m['stock_actual'] == 0]
-            if sin_stock:
-                consejos.append(f"{sin_stock[0]['nombre']} está agotado. Reabastecer es urgente para no detener la producción.")
-
-        if not consejos:
-            consejos.append("¡Todo marcha bien! Las ventas están estables. Mantén el ritmo de producción actual.")
-
-        return consejos[0]

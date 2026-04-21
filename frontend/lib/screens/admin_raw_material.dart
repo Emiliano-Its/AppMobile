@@ -53,6 +53,8 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
     required bool isEditing,
     int? id,
     bool fromScanner = false,
+    double? stockAnterior, // para calcular el movimiento
+    String? tipoMovimiento, // ENTRADA o SALIDA forzado (desde scanner)
   }) async {
     final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
 
@@ -74,49 +76,127 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
           : await http.post(url, headers: authHeaders, body: jsonEncode(data));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        if (mounted && !fromScanner) Navigator.pop(context); 
-        _fetchInsumos(); 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.green, content: Text("¡Inventario actualizado!")),
-        );
+        // Registrar movimiento si es una edición con cambio de stock
+        if (isEditing && id != null && stockAnterior != null) {
+          final double nuevoStock = double.parse(qty);
+          final double diferencia = (nuevoStock - stockAnterior).abs();
+          final String tipo = tipoMovimiento ??
+              (nuevoStock >= stockAnterior ? 'ENTRADA' : 'SALIDA');
+
+          if (diferencia > 0) {
+            await http.post(
+              Uri.parse(ApiConfig.inventoryMovements),
+              headers: authHeaders,
+              body: jsonEncode({
+                'materia_prima': id,
+                'tipo': tipo,
+                'cantidad': diferencia,
+                'comentario': tipo == 'ENTRADA'
+                    ? 'Entrada registrada desde app'
+                    : 'Salida registrada desde app',
+              }),
+            );
+          }
+        }
+
+        if (mounted && !fromScanner) Navigator.pop(context);
+        _fetchInsumos();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(backgroundColor: Colors.green, content: Text("¡Inventario actualizado!")),
+          );
+        }
       }
     } catch (e) {
       debugPrint("Error de conexión: $e");
     }
   }
 
-  // --- 3. LÓGICA DE ESCANEO CON MOBILE_SCANNER ---
-  void _openScanner(bool isEntrada) {
-    Navigator.push(
+  void _openScanner(bool isEntrada) async {
+    final MobileScannerController ctrl = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+    );
+
+    final String? codigo = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
           appBar: AppBar(
-            title: Text(isEntrada ? "Escanear Entrada" : "Escanear Salida", style: const TextStyle(color: Colors.white)),
+            title: Text(
+              isEntrada ? "Escanear Entrada" : "Escanear Salida",
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: AppColors.verdeBosque,
+            iconTheme: const IconThemeData(color: Colors.white),
           ),
-          body: MobileScanner(
-            onDetect: (capture) {
-              final List<Barcode> barcodes = capture.barcodes;
-              if (barcodes.isNotEmpty) {
-                final String? code = barcodes.first.rawValue;
-                if (code != null) {
-                  // Cerramos la cámara
-                  Navigator.pop(context);
-                  // Procesamos el código encontrado
-                  _procesarEscaneo(code, isEntrada);
-                }
-              }
-            },
+          body: Stack(
+            children: [
+              MobileScanner(
+                controller: ctrl,
+                onDetect: (capture) {
+                  final code = capture.barcodes.firstOrNull?.rawValue;
+                  if (code != null) {
+                    ctrl.dispose();
+                    Navigator.pop(context, code);
+                  }
+                },
+              ),
+              // Recuadro de guía
+              Center(
+                child: Container(
+                  width: 280,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.greenAccent, width: 3),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+              ),
+              // Líneas de esquina decorativas
+              Center(
+                child: SizedBox(
+                  width: 280,
+                  height: 150,
+                  child: Stack(
+                    children: [
+                      _corner(0, 0, true, true),
+                      _corner(0, null, true, false),
+                      _corner(null, 0, false, true),
+                      _corner(null, null, false, false),
+                    ],
+                  ),
+                ),
+              ),
+              const Positioned(
+                bottom: 60,
+                left: 0, right: 0,
+                child: Text(
+                  "Centra el código de barras en el recuadro",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    backgroundColor: Colors.black54,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
-  }
 
-  void _procesarEscaneo(String code, bool isEntrada) {
+    ctrl.dispose();
+
+    if (!mounted) return;
+
+    if (codigo == null) return;
+
     final insumo = insumos.firstWhere(
-      (item) => item['codigo_barras'] == code,
+      (item) => item['codigo_barras'] == codigo,
       orElse: () => null,
     );
 
@@ -124,9 +204,31 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
       _showQuantityDialog(insumo, isEntrada);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.orange, content: Text("No se encontró el código: $code")),
+        SnackBar(
+          backgroundColor: Colors.orange,
+          content: Text("No se encontró el código: $codigo"),
+        ),
       );
     }
+  }
+
+  Widget _corner(double? top, double? bottom, bool left, bool alignLeft) {
+    return Positioned(
+      top: top, bottom: bottom,
+      left: alignLeft ? 0 : null,
+      right: alignLeft ? null : 0,
+      child: Container(
+        width: 20, height: 20,
+        decoration: BoxDecoration(
+          border: Border(
+            top: top == 0 ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+            bottom: bottom == 0 ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+            left: alignLeft ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+            right: alignLeft ? BorderSide.none : const BorderSide(color: Colors.white, width: 3),
+          ),
+        ),
+      ),
+    );
   }
 
   // --- 4. DIÁLOGO DE CANTIDAD ---
@@ -166,12 +268,14 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
               _saveInsumo(
                 name: insumo['nombre'],
                 code: insumo['codigo_barras'],
-                qty: nuevoStock.toString(),
+                qty: _formatNum(nuevoStock),
                 unit: insumo['unidad_medida'],
-                price: insumo['precio_ultimo_ingreso'].toString(),
+                price: _formatNum(insumo['precio_ultimo_ingreso']),
                 isEditing: true,
                 id: insumo['id'],
                 fromScanner: true,
+                stockAnterior: stockActual,
+                tipoMovimiento: isEntrada ? 'ENTRADA' : 'SALIDA',
               );
             },
             child: const Text("CONFIRMAR", style: TextStyle(color: Colors.white)),
@@ -192,10 +296,40 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.verdeBosque))
-          : ListView.builder(
-              padding: const EdgeInsets.only(bottom: 100, left: 15, right: 15, top: 15),
-              itemCount: insumos.length,
-              itemBuilder: (context, index) => _buildInsumoCard(insumos[index]),
+          : Column(
+              children: [
+                // Header con resumen
+                Container(
+                  color: AppColors.verdeBosque,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Row(
+                    children: [
+                      _ResumenItem(
+                        label: "Total insumos",
+                        value: "${insumos.length}",
+                        icon: Icons.inventory_2_rounded,
+                      ),
+                      _ResumenItem(
+                        label: "Stock bajo",
+                        value: "${insumos.where((i) => (double.tryParse(i['stock_actual'].toString()) ?? 0) < 5 && (double.tryParse(i['stock_actual'].toString()) ?? 0) > 0).length}",
+                        icon: Icons.warning_rounded,
+                      ),
+                      _ResumenItem(
+                        label: "Sin stock",
+                        value: "${insumos.where((i) => (double.tryParse(i['stock_actual'].toString()) ?? 0) == 0).length}",
+                        icon: Icons.remove_circle_rounded,
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 100, left: 15, right: 15, top: 15),
+                    itemCount: insumos.length,
+                    itemBuilder: (context, index) => _buildInsumoCard(insumos[index]),
+                  ),
+                ),
+              ],
             ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Padding(
@@ -230,14 +364,79 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
   }
 
   Widget _buildInsumoCard(dynamic item) {
+    final double stock = double.tryParse(item['stock_actual'].toString()) ?? 0;
+    final bool stockBajo = stock > 0 && stock < 5;
+    final bool sinStock  = stock == 0;
+    final Color stockColor = sinStock ? Colors.red : stockBajo ? Colors.orange : AppColors.verdeBosque;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: ListTile(
-        title: Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text("Stock: ${item['stock_actual']} ${item['unidad_medida']}"),
-        trailing: const Icon(Icons.chevron_right),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+        side: BorderSide(color: Colors.grey.withOpacity(0.15)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
         onTap: () => _showFormManual(insumo: item),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: stockColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.grain_rounded, color: stockColor, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item['nombre'],
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 3),
+                    Text(
+                      "Último precio: \$${item['precio_ultimo_ingreso']} / ${item['unidad_medida']}",
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                    if (sinStock || stockBajo) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.warning_rounded, size: 12, color: stockColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            sinStock ? "Sin stock" : "Stock bajo",
+                            style: TextStyle(fontSize: 11, color: stockColor, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    stock == stock.truncateToDouble()
+                        ? stock.toInt().toString()
+                        : stock.toString(),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: stockColor),
+                  ),
+                  Text(item['unidad_medida'],
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                ],
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: Colors.grey.shade300),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -249,9 +448,9 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
     // Controladores con los datos si estamos editando
     final nombreCtrl = TextEditingController(text: isEditing ? insumo['nombre'] : '');
     final codigoCtrl = TextEditingController(text: isEditing ? insumo['codigo_barras'] : '');
-    final cantidadCtrl = TextEditingController(text: isEditing ? insumo['stock_actual'].toString() : '');
+    final cantidadCtrl = TextEditingController(text: isEditing ? _formatNum(insumo['stock_actual']) : '');
     final unidadCtrl = TextEditingController(text: isEditing ? insumo['unidad_medida'] : '');
-    final precioCtrl = TextEditingController(text: isEditing ? insumo['precio_ultimo_ingreso'].toString() : '');
+    final precioCtrl = TextEditingController(text: isEditing ? _formatNum(insumo['precio_ultimo_ingreso']) : '');
 
     showModalBottomSheet(
       context: context,
@@ -307,6 +506,9 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
                       price: precioCtrl.text,
                       isEditing: isEditing,
                       id: isEditing ? insumo['id'] : null,
+                      stockAnterior: isEditing
+                          ? double.tryParse(insumo['stock_actual'].toString())
+                          : null,
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -336,6 +538,33 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
           labelStyle: const TextStyle(color: AppColors.verdeBosque),
           focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.verdeBosque)),
         ),
+      ),
+    );
+  }
+  // Muestra entero si no tiene decimales, decimal si los tiene
+  String _formatNum(dynamic val) {
+    final d = double.tryParse(val.toString()) ?? 0;
+    return d == d.truncateToDouble() ? d.toInt().toString() : d.toString();
+  }
+}
+
+class _ResumenItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _ResumenItem({required this.label, required this.value, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white70, size: 20),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+        ],
       ),
     );
   }
