@@ -146,15 +146,22 @@ class SaleViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                # Solo restauramos stock si ya fue descontado (tipo ENTREGA)
                 if venta.tipo == 'ENTREGA':
+                    # Stock fue descontado al aceptar — restaurar
                     for detalle in venta.detalles.all():
                         producto = detalle.producto
                         producto.stock_actual += detalle.cantidad
-                        # Si tenía stock 0 y estaba inactivo, lo reactivamos
-                        if not producto.activo:
+                        if not producto.activo and producto.stock_actual > 0:
                             producto.activo = True
                         producto.save()
+                else:
+                    # tipo PEDIDO: stock no fue descontado, pero corregimos
+                    # productos inactivos que tengan stock (inconsistencia)
+                    for detalle in venta.detalles.all():
+                        producto = detalle.producto
+                        if not producto.activo and producto.stock_actual > 0:
+                            producto.activo = True
+                            producto.save()
 
                 venta.estado = 'RECHAZADO'
                 venta.save()
