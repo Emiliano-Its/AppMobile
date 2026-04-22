@@ -11,9 +11,22 @@ class FinalProductSerializer(serializers.ModelSerializer):
         fields = ['id', 'codigo_barras', 'nombre', 'precio_venta', 'stock_actual', 'activo', 'imagen', 'imagen_url']
 
     def get_imagen_url(self, obj):
-        if obj.imagen:
+        if not obj.imagen:
+            return None
+        name = obj.imagen.name or ''
+        # Si el campo ya tiene una URL completa de Cloudinary guardada
+        if name.startswith('http'):
+            # Corregir URLs con slash simple (https:/res. -> https://res.)
+            if name.startswith('https:/') and not name.startswith('https://'):
+                name = 'https://' + name[7:]
+            elif name.startswith('http:/') and not name.startswith('http://'):
+                name = 'http://' + name[6:]
+            return name
+        # Path relativo normal — dejar que el storage construya la URL
+        try:
             return obj.imagen.url
-        return None
+        except Exception:
+            return None
 
 
 class SaleDetailSerializer(serializers.ModelSerializer):
@@ -67,4 +80,4 @@ class SaleSerializer(serializers.ModelSerializer):
                     product.activo = False
                 product.save()
 
-        return sale 
+        return sale
