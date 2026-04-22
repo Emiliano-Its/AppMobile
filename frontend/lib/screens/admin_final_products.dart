@@ -585,7 +585,7 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
 void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
   final bool isEditing = producto != null;
   
-  // Si no estamos editando, limpiamos la imagen seleccionada previamente
+
   if (!isEditing) _imageFile = null;
   bool deleteImage = false;
 
@@ -768,13 +768,13 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
     );
   }
 
-  File? _imageFile; // Aquí guardaremos la foto temporalmente
+  File? _imageFile; 
 final ImagePicker _picker = ImagePicker();
 
 Future<void> _pickImage() async {
   final XFile? pickedFile = await _picker.pickImage(
-    source: ImageSource.gallery, // O ImageSource.camera si quieres tomar la foto al momento
-    imageQuality: 50, // Bajamos la calidad para que no pese tanto en tu servidor Debian
+    source: ImageSource.gallery, 
+    imageQuality: 50, 
   );
 
   if (pickedFile != null) {

@@ -61,13 +61,16 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     }
   }
 
-  // Prefija la clave con el username para aislar datos entre cuentas
-  String _key(String k) => '${_userName}__$k';
+  // Prefija con user_id (estable aunque cambie el username)
+  String _key(String k) => 'uid_${_userId}__$k';
+  int _userId = 0;
 
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
+    // Cargar _userId ANTES del setState para que _key() funcione correctamente
+    _userId = prefs.getInt('user_id') ?? 0;
     setState(() {
-      _userName = prefs.getString('username') ?? "Usuario";
+      _userName  = prefs.getString('username') ?? "Usuario";
       _userEmail = prefs.getString('email') ?? "";
       _direccionController.text = prefs.getString(_key('default_address')) ?? '';
       _telefonoController.text  = prefs.getString(_key('default_phone')) ?? '';
@@ -121,6 +124,8 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
 
   Future<void> _saveProfileData() async {
     final prefs = await SharedPreferences.getInstance();
+    // Asegurar que _userId esté siempre actualizado antes de guardar
+    if (_userId == 0) _userId = prefs.getInt('user_id') ?? 0;
     final token = prefs.getString('access_token') ?? '';
 
     final response = await http.post(

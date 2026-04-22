@@ -4,7 +4,7 @@ import '../main.dart';
 import './sales_personal.dart'; 
 import './customer_shop_screen.dart';
 import './login.dart';
-import './admin_users.dart'; // Nueva pantalla de gestión de usuarios
+import './admin_users.dart'; 
 
 class AdminInventoryHub extends StatefulWidget {
   const AdminInventoryHub({super.key});

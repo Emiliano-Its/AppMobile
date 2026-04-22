@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; 
 import '../api_config.dart'; 
 
-// --- IMPORTACIONES DE TUS PANTALLAS ---
 import 'registro_user.dart'; 
 import 'main_wrapper.dart';
 

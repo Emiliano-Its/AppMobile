@@ -4,13 +4,13 @@ import 'package:intl/date_symbol_data_local.dart';
 import './screens/login.dart';
 
 void main() async {
-  // 1. Esto DEBE ser lo primero
+  
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 2. Inicializamos el soporte de fechas
+
   await initializeDateFormatting('es_MX', null);
   
-  // 3. Arrancamos
+
   runApp(MyApp());
 }
 
@@ -23,7 +23,6 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Tostadas App',
       
-      // CONFIGURACIÓN DE IDIOMA CRÍTICA
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -41,7 +40,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       
-      // IMPORTANTE: Asegúrate que LoginScreen NO tenga un 'const' antes si da error
+
       home: LoginScreen(),
     );
   }
@@ -51,7 +50,7 @@ class MyApp extends StatelessWidget {
 class AppColors {
   static const Color fondoHueso = Color(0xFFF3F3ED); 
   static const Color verdeBosque = Color(0xFF2D6A4F); 
-  static const Color verdeBorde = Color(0xFF40916C);  // <--- ESTA ES LA QUE TE PIDE EL LOGIN
+  static const Color verdeBorde = Color(0xFF40916C);  
   static const Color textoGris = Color(0xFF4F4F4F);   
-  static const Color tituloNegro = Color(0xFF333333); // <--- ESTA ES LA QUE TE PEDÍA EL CORTE
+  static const Color tituloNegro = Color(0xFF333333); 
 }
