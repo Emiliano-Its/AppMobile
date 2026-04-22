@@ -7,7 +7,6 @@ import '../main.dart';
 import '../api_config.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:http_parser/http_parser.dart';
 
 class FinalProductsScreen extends StatefulWidget {
   const FinalProductsScreen({super.key});
