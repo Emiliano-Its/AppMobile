@@ -269,9 +269,9 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                   ),
                   child: ClipRRect(
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                    child: product['imagen'] != null
+                    child: product['imagen_url'] != null
                         ? Image.network(
-                            ApiConfig.getImageUrl(product['imagen']),
+                            ApiConfig.getImageUrl(product['imagen_url']),
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) => 
                               const Icon(Icons.broken_image, size: 50, color: Colors.grey),

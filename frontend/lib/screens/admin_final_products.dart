@@ -498,9 +498,9 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
                   child: Container(
                     width: 60, height: 60,
                     color: Colors.grey.shade100,
-                    child: item['imagen'] != null
+                    child: item['imagen_url'] != null
                         ? Image.network(
-                            ApiConfig.getImageUrl(item['imagen']),
+                            ApiConfig.getImageUrl(item['imagen_url']),
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => const Icon(Icons.bakery_dining_rounded, size: 30, color: Colors.orange),
                           )
@@ -621,7 +621,7 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
               StatefulBuilder(
                 builder: (context, setImageState) {
                   final bool tieneImagen = _imageFile != null ||
-                      (isEditing && producto['imagen'] != null && !deleteImage);
+                      (isEditing && producto['imagen_url'] != null && !deleteImage);
                   return Column(
                     children: [
                       Stack(
@@ -644,11 +644,11 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
                                       borderRadius: BorderRadius.circular(18),
                                       child: Image.file(_imageFile!, fit: BoxFit.cover),
                                     )
-                                  : (isEditing && producto['imagen'] != null && !deleteImage)
+                                  : (isEditing && producto['imagen_url'] != null && !deleteImage)
                                       ? ClipRRect(
                                           borderRadius: BorderRadius.circular(18),
                                           child: Image.network(
-                                            ApiConfig.getImageUrl(producto['imagen']),
+                                            ApiConfig.getImageUrl(producto['imagen_url']),
                                             fit: BoxFit.cover,
                                             errorBuilder: (_, __, ___) =>
                                                 const Icon(Icons.broken_image, size: 50, color: Colors.grey),

@@ -303,9 +303,9 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
                 child: Container(
                   width: double.infinity,
                   color: Colors.grey[100],
-                  child: p['imagen'] != null
+                  child: p['imagen_url'] != null
                       ? Image.network(
-                          ApiConfig.getImageUrl(p['imagen']),
+                          ApiConfig.getImageUrl(p['imagen_url']),
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => 
                             const Icon(Icons.broken_image, color: Colors.grey),
