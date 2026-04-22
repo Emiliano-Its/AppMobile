@@ -312,7 +312,6 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
     request.files.add(await http.MultipartFile.fromPath(
       'imagen',
       _imageFile!.path,
-      contentType: MediaType('image', 'jpeg'),
     ));
   } else if (deleteImage && isEditing) {
     // Indicarle a Django que borre la imagen existente
