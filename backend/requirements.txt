@@ -14,3 +14,5 @@ boto3
 django-storages[s3]
 cloudinary
 django-cloudinary-storage
+cloudinary
+django-cloudinary-storage
