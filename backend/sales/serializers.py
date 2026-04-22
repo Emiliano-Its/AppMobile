@@ -4,10 +4,16 @@ from .models import Venta, DetalleVenta, FinalProduct, MensajePedido
 
 class FinalProductSerializer(serializers.ModelSerializer):
     imagen = serializers.ImageField(required=False, allow_null=True)
+    imagen_url = serializers.SerializerMethodField()
 
     class Meta:
         model = FinalProduct
-        fields = ['id', 'codigo_barras', 'nombre', 'precio_venta', 'stock_actual', 'activo', 'imagen']
+        fields = ['id', 'codigo_barras', 'nombre', 'precio_venta', 'stock_actual', 'activo', 'imagen', 'imagen_url']
+
+    def get_imagen_url(self, obj):
+        if obj.imagen:
+            return obj.imagen.url
+        return None
 
 
 class SaleDetailSerializer(serializers.ModelSerializer):
@@ -61,4 +67,4 @@ class SaleSerializer(serializers.ModelSerializer):
                     product.activo = False
                 product.save()
 
-        return sale
+        return sale 
