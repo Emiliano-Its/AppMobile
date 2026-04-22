@@ -24,7 +24,8 @@ class FinalProductSerializer(serializers.ModelSerializer):
         return f"https://res.cloudinary.com/{cloud_name}/image/upload/{name}"
 
     def update(self, instance, validated_data):
-        if 'imagen' not in self.context['request'].FILES:
+        request = self.context.get('request')
+        if request is None or 'imagen' not in request.FILES:
             validated_data.pop('imagen', None)
         return super().update(instance, validated_data)
 
