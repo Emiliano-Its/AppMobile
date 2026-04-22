@@ -13,19 +13,10 @@ class FinalProductSerializer(serializers.ModelSerializer):
     def get_imagen_url(self, obj):
         if not obj.imagen:
             return None
-        # Si por alguna razón el nombre ya es una URL completa (legacy o error)
         if obj.imagen.name.startswith('http'):
             return obj.imagen.name.replace('https:/res', 'https://res')
-        # Intentar usar la URL generada por el storage de Django
-        try:
-            url = obj.imagen.url
-            # Si la URL no contiene image/upload, inyectarlo
-            if 'res.cloudinary.com' in url and 'image/upload/' not in url:
-                return url.replace('dfaqoztrp/', 'dfaqoztrp/image/upload/')
-            return url
-        except Exception:
-            # Fallback manual
-            return f"https://res.cloudinary.com/dfaqoztrp/image/upload/{obj.imagen.name}"
+        cloud_name = "dfaqoztrp"
+        return f"https://res.cloudinary.com/{cloud_name}/image/upload/{obj.imagen.name}"
 
 
 class SaleDetailSerializer(serializers.ModelSerializer):
