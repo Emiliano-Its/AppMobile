@@ -2,6 +2,6 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "sleep 10 && python manage.py migrate && python manage.py collectstatic --noinput && gunicorn myapp.wsgi --bind 0.0.0.0:$PORT"
+startCommand = "bash start.sh"
 healthcheckPath = "/api/users/login/"
 healthcheckTimeout = 300
