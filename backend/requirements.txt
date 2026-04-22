@@ -12,3 +12,5 @@ dj-database-url
 django-storages
 boto3
 django-storages[s3]
+cloudinary
+django-cloudinary-storage
