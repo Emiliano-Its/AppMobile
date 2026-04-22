@@ -27,8 +27,23 @@ SECRET_KEY = env('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
 
-# Agregué la IP de tu servidor Debian y localhost para pruebas
-ALLOWED_HOSTS = ['192.168.100.13', '10.0.2.2', 'localhost', '127.0.0.1', '10.75.167.248', '10.99.145.248']
+# ALLOWED_HOSTS acepta la IP local y cualquier dominio de Railway
+ALLOWED_HOSTS = [
+    '192.168.100.13',
+    '10.0.2.2',
+    'localhost',
+    '127.0.0.1',
+    '10.75.167.248',
+    '10.99.145.248',
+    '.railway.app',  # cubre cualquier subdominio de Railway
+    '.up.railway.app',
+]
+
+# CSRF para Railway
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.railway.app',
+    'https://*.up.railway.app',
+]
 
 
 # Application definition
@@ -49,6 +64,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Sirve archivos estáticos en producción
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -111,7 +127,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'America/Monterrey'
+TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
@@ -123,6 +139,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # CONFIGURACIÓN DE MEDIA (VITAL PARA LAS FOTOS DE TOSTADAS)
 # URL pública para acceder a las imágenes
