@@ -623,15 +623,42 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
 
     // Verificar si el pedido está fuera de su ventana de horario
     bool fueraDeHorario = false;
-    if (!isPending && horarios.isNotEmpty && horarios != 'No especificado') {
-      fueraDeHorario = _estaFueraDeHorario(horarios);
+    bool fechaCaducada = false;
+    if (horarios.isNotEmpty && horarios != 'No especificado') {
+      fechaCaducada = _todosCaducados(horarios);
+      if (!fechaCaducada && !isPending) {
+        fueraDeHorario = _estaFueraDeHorario(horarios);
+      }
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Alerta de fecha caducada
+        if (fechaCaducada)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.red.shade300),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.event_busy_rounded, color: Colors.red.shade700, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "⚠️ Fecha caducada — los días disponibles ya pasaron",
+                    style: TextStyle(fontSize: 12, color: Colors.red.shade800, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
         // Alerta de horario si aplica
-        if (fueraDeHorario)
+        if (fueraDeHorario && !fechaCaducada)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -680,13 +707,96 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
     );
   }
 
-  // Verifica si ahora mismo estamos fuera de los horarios del cliente
+  // Parsea una fecha del formato "22/4" o "22/4 al 25/4" y retorna el rango
+  // Retorna null si no hay fecha en el bloque
+  DateTimeRange? _parsearFechaBloque(String bloque) {
+    try {
+      final now = DateTime.now();
+      // Rango: "22/4 al 25/4"
+      final matchRango = RegExp(r'(\d+)/(\d+)\s+al\s+(\d+)/(\d+)').firstMatch(bloque);
+      if (matchRango != null) {
+        final dS = int.parse(matchRango.group(1)!);
+        final mS = int.parse(matchRango.group(2)!);
+        final dE = int.parse(matchRango.group(3)!);
+        final mE = int.parse(matchRango.group(4)!);
+        final start = DateTime(now.year, mS, dS);
+        final end = DateTime(now.year, mE, dE, 23, 59);
+        return DateTimeRange(start: start, end: end);
+      }
+      // Día único: "22/4"
+      final matchSingle = RegExp(r'(\d+)/(\d+)').firstMatch(bloque);
+      if (matchSingle != null) {
+        final d = int.parse(matchSingle.group(1)!);
+        final m = int.parse(matchSingle.group(2)!);
+        final fecha = DateTime(now.year, m, d);
+        return DateTimeRange(start: fecha, end: DateTime(now.year, m, d, 23, 59));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Extrae la hora de fin de un bloque en minutos
+  int? _extraerHoraFinMinutos(String bloque) {
+    final m12 = RegExp(
+      r"\((\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)",
+      caseSensitive: false,
+    ).firstMatch(bloque);
+    if (m12 != null) {
+      int he = int.parse(m12.group(4)!);
+      final me = int.parse(m12.group(5)!);
+      final ae = m12.group(6)!.toUpperCase();
+      if (ae == 'PM' && he != 12) he += 12;
+      if (ae == 'AM' && he == 12) he = 0;
+      return he * 60 + me;
+    }
+    final m24 = RegExp(r"\((\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\)").firstMatch(bloque);
+    if (m24 != null) {
+      final he = int.parse(m24.group(3)!);
+      final me = int.parse(m24.group(4)!);
+      return he * 60 + me;
+    }
+    return null;
+  }
+
+  // Retorna true si TODOS los bloques han caducado (fecha pasada, o fecha hoy y hora ya paso)
+  bool _todosCaducados(String horarios) {
+    try {
+      final now = DateTime.now();
+      final hoy = DateTime(now.year, now.month, now.day);
+      final nowMinutes = now.hour * 60 + now.minute;
+      for (final bloque in horarios.split('|')) {
+        final rango = _parsearFechaBloque(bloque);
+        if (rango == null) return false;
+        final endDay = DateTime(rango.end.year, rango.end.month, rango.end.day);
+        if (endDay.isAfter(hoy)) return false;
+        if (endDay.isAtSameMomentAs(hoy)) {
+          final horaFin = _extraerHoraFinMinutos(bloque);
+          if (horaFin == null || nowMinutes <= horaFin) return false;
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Verifica si ahora mismo estamos fuera de los horarios del cliente (considera fecha y hora)
   bool _estaFueraDeHorario(String horarios) {
     try {
-      final now = TimeOfDay.now();
+      final now = DateTime.now();
+      final hoy = DateTime(now.year, now.month, now.day);
       final nowMinutes = now.hour * 60 + now.minute;
 
       for (final bloque in horarios.split('|')) {
+        // Verificar si la fecha aplica para hoy
+        final rango = _parsearFechaBloque(bloque);
+        if (rango != null) {
+          final startDay = DateTime(rango.start.year, rango.start.month, rango.start.day);
+          final endDay = DateTime(rango.end.year, rango.end.month, rango.end.day);
+          // Si la fecha no cubre hoy, saltar este bloque
+          if (hoy.isBefore(startDay) || hoy.isAfter(endDay)) continue;
+        }
+
         // Intenta formato 12h con AM/PM: "9:00 AM - 6:00 PM"
         final match12 = RegExp(
           r'\((\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)',
@@ -706,9 +816,7 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
           if (apE == 'PM' && hE != 12) hE += 12;
           if (apE == 'AM' && hE == 12) hE = 0;
 
-          final startMin = hS * 60 + mS;
-          final endMin   = hE * 60 + mE;
-          if (nowMinutes >= startMin && nowMinutes <= endMin) return false;
+          if (nowMinutes >= hS * 60 + mS && nowMinutes <= hE * 60 + mE) return false;
           continue;
         }
 
@@ -723,9 +831,7 @@ class _SalesPersonalScreenState extends State<SalesPersonalScreen> {
           final hE = int.parse(match24.group(3)!);
           final mE = int.parse(match24.group(4)!);
 
-          final startMin = hS * 60 + mS;
-          final endMin   = hE * 60 + mE;
-          if (nowMinutes >= startMin && nowMinutes <= endMin) return false;
+          if (nowMinutes >= hS * 60 + mS && nowMinutes <= hE * 60 + mE) return false;
         }
       }
       return true;
@@ -848,10 +954,60 @@ class _RutaEntregasScreenState extends State<RutaEntregasScreen> {
     final horarios = (p['fecha_entrega_estimada'] ?? '').toString();
     if (horarios.isEmpty) return Colors.grey;
     try {
-      final now = TimeOfDay.now();
+      final now = DateTime.now();
+      final hoy = DateTime(now.year, now.month, now.day);
       final nowMin = now.hour * 60 + now.minute;
+
+      bool todosEnPasado = true;
+
       for (final bloque in horarios.split('|')) {
-        // Formato 12h con AM/PM
+        // Parsear fecha del bloque
+        DateTimeRange? rango;
+        final matchRango = RegExp(r'(\d+)/(\d+)\s+al\s+(\d+)/(\d+)').firstMatch(bloque);
+        if (matchRango != null) {
+          final dS = int.parse(matchRango.group(1)!); final mS = int.parse(matchRango.group(2)!);
+          final dE = int.parse(matchRango.group(3)!); final mE = int.parse(matchRango.group(4)!);
+          rango = DateTimeRange(
+            start: DateTime(now.year, mS, dS),
+            end: DateTime(now.year, mE, dE, 23, 59),
+          );
+        } else {
+          final matchSingle = RegExp(r'(\d+)/(\d+)').firstMatch(bloque);
+          if (matchSingle != null) {
+            final d = int.parse(matchSingle.group(1)!); final m = int.parse(matchSingle.group(2)!);
+            rango = DateTimeRange(start: DateTime(now.year, m, d), end: DateTime(now.year, m, d, 23, 59));
+          }
+        }
+
+        if (rango != null) {
+          final endDay = DateTime(rango.end.year, rango.end.month, rango.end.day);
+          // Verificar si este bloque ya caducó (incluyendo hora si es hoy)
+          if (endDay.isAfter(hoy)) {
+            todosEnPasado = false;
+          } else if (endDay.isAtSameMomentAs(hoy)) {
+            // Es hoy — extraer hora de fin
+            int? horaFin;
+            final mf12 = RegExp(r'\(\d+:\d+\s*(?:AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)', caseSensitive: false).firstMatch(bloque);
+            if (mf12 != null) {
+              int hf = int.parse(mf12.group(1)!); final mf = int.parse(mf12.group(2)!); final af = mf12.group(3)!.toUpperCase();
+              if (af == 'PM' && hf != 12) hf += 12;
+              if (af == 'AM' && hf == 12) hf = 0;
+              horaFin = hf * 60 + mf;
+            } else {
+              final mf24 = RegExp(r'\(\d{1,2}:\d{2}\s*-\s*(\d{1,2}):(\d{2})\)').firstMatch(bloque);
+              if (mf24 != null) horaFin = int.parse(mf24.group(1)!) * 60 + int.parse(mf24.group(2)!);
+            }
+            if (horaFin == null || nowMin <= horaFin) todosEnPasado = false;
+          }
+
+          // Si la fecha no cubre hoy, saltar para verde/naranja
+          final startDay = DateTime(rango.start.year, rango.start.month, rango.start.day);
+          if (hoy.isBefore(startDay) || hoy.isAfter(endDay)) continue;
+        } else {
+          todosEnPasado = false;
+        }
+
+        // Formato 12h
         final m12 = RegExp(
           r'\((\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\)',
           caseSensitive: false,
@@ -866,7 +1022,7 @@ class _RutaEntregasScreenState extends State<RutaEntregasScreen> {
           if (nowMin >= hs * 60 + ms && nowMin <= he * 60 + me) return Colors.green;
           continue;
         }
-        // Formato 24h sin AM/PM
+        // Formato 24h
         final m24 = RegExp(r'\((\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\)').firstMatch(bloque);
         if (m24 != null) {
           final hs = int.parse(m24.group(1)!); final ms = int.parse(m24.group(2)!);
@@ -874,6 +1030,8 @@ class _RutaEntregasScreenState extends State<RutaEntregasScreen> {
           if (nowMin >= hs * 60 + ms && nowMin <= he * 60 + me) return Colors.green;
         }
       }
+
+      if (todosEnPasado) return Colors.red; // Todas las fechas caducaron
       return Colors.orange;
     } catch (_) { return Colors.grey; }
   }
@@ -963,12 +1121,13 @@ class _RutaEntregasScreenState extends State<RutaEntregasScreen> {
           // Leyenda
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-            child: Row(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 4,
               children: [
-                _leyenda(Colors.green, "Dentro de horario"),
-                const SizedBox(width: 16),
+                _leyenda(Colors.green, "En horario"),
                 _leyenda(Colors.orange, "Fuera de horario"),
-                const SizedBox(width: 16),
+                _leyenda(Colors.red, "Caducado"),
                 _leyenda(Colors.grey, "Sin horario"),
               ],
             ),

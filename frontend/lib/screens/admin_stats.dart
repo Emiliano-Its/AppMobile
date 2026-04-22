@@ -199,7 +199,7 @@ class _AdminStatsScreenState extends State<AdminStatsScreen> {
                               const Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("Tostadería el Molino",
+                                  Text("Tostadería",
                                     style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1)),
                                   Text("Panel de estadísticas",
                                     style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),

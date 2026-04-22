@@ -39,7 +39,7 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
         });
       }
     } catch (e) {
-      debugPrint("Error cargando insumos: $e");
+      debugPrint("Error cargando materia: $e");
       setState(() => _isLoading = false);
     }
   }
@@ -312,7 +312,7 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
                   child: Row(
                     children: [
                       _ResumenItem(
-                        label: "Total insumos",
+                        label: "Total materia",
                         value: "${insumos.length}",
                         icon: Icons.inventory_2_rounded,
                       ),

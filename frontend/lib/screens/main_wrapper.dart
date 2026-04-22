@@ -54,7 +54,7 @@ class _MainWrapperState extends State<MainWrapper> {
     });
   }
 
-  // ── ADMIN: Stats / Productos / Insumos / Panel ──────────────────────────
+  // ── ADMIN: Stats / Productos / Materia / Panel ──────────────────────────
   List<Widget> _getAdminScreens() => [
     const AdminStatsScreen(),
     const FinalProductsScreen(),
@@ -63,9 +63,9 @@ class _MainWrapperState extends State<MainWrapper> {
   ];
 
   List<BottomNavigationBarItem> _adminTabs() => const [
-    BottomNavigationBarItem(icon: Icon(Icons.analytics_rounded),     label: 'Stats'),
+    BottomNavigationBarItem(icon: Icon(Icons.analytics_rounded),     label: 'Estadisticas'),
     BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded),   label: 'Productos'),
-    BottomNavigationBarItem(icon: Icon(Icons.bakery_dining_rounded), label: 'Insumos'),
+    BottomNavigationBarItem(icon: Icon(Icons.bakery_dining_rounded), label: 'Materia Prima'),
     BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings_rounded), label: 'Panel'),
   ];
 

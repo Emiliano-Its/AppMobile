@@ -98,8 +98,10 @@ class _LocalSalesScreenState extends State<LocalSalesScreen> {
     final Map<String, dynamic> saleData = {
       "tipo": "LOCAL",
       "cliente_nombre": "Venta Mostrador",
+      "estado": "ENTREGADO",
+      "fecha_cobro": DateTime.now().toUtc().toIso8601String(),
       "total": _calculateTotal().toStringAsFixed(2),
-      "details": details, 
+      "details": details,
     };
 
     try {
