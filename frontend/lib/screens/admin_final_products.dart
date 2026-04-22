@@ -292,7 +292,7 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
   setState(() => _isLoading = true);
 
   final url = isEditing ? Uri.parse('$apiUrl$id/') : Uri.parse(apiUrl);
-  var request = http.MultipartRequest(isEditing ? 'PUT' : 'POST', url);
+  var request = http.MultipartRequest(isEditing ? 'PATCH' : 'POST', url);
 
   final prefs = await SharedPreferences.getInstance();
   final String token = prefs.getString('access_token') ?? '';
