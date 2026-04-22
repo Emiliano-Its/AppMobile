@@ -13,10 +13,20 @@ class FinalProductSerializer(serializers.ModelSerializer):
     def get_imagen_url(self, obj):
         if not obj.imagen:
             return None
-        if obj.imagen.name.startswith('http'):
-            return obj.imagen.name.replace('https:/res', 'https://res')
+        name = obj.imagen.name or ''
+        if not name:
+            return None
+        if 'image/upload/' in name:
+            name = name.split('image/upload/')[-1]
+        if name.startswith('http'):
+            return name
         cloud_name = "dfaqoztrp"
-        return f"https://res.cloudinary.com/{cloud_name}/image/upload/{obj.imagen.name}"
+        return f"https://res.cloudinary.com/{cloud_name}/image/upload/{name}"
+
+    def update(self, instance, validated_data):
+        if 'imagen' not in self.context['request'].FILES:
+            validated_data.pop('imagen', None)
+        return super().update(instance, validated_data)
 
 
 class SaleDetailSerializer(serializers.ModelSerializer):
