@@ -331,7 +331,7 @@ Future<void> _saveProduct(String name, String code, String price, String stock, 
       _showSnackBar("Error en el servidor: ${response.body}", Colors.red);
     }
   } catch (e) {
-    _showSnackBar("Error de red al conectar con Debian", Colors.red);
+    _showSnackBar("Error de red al conectar con servidor", Colors.red);
   } finally {
     setState(() => _isLoading = false);
   }
@@ -740,7 +740,7 @@ void _showFormDialog({dynamic producto, String? nuevoCodigoEscanedado}) {
                     }
                   },
                   child: Text(
-                    isEditing ? "ACTUALIZAR DATOS" : "REGISTRAR EN DEBIAN", 
+                    isEditing ? "ACTUALIZAR DATOS" : "REGISTRAR EN BASE DE DATOS", 
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
                   ),
                 ),

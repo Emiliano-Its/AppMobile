@@ -1,10 +1,10 @@
 class ApiConfig {
   // 1. IP de tu servidor Debian (Asegúrate de que sea la correcta en tu red actual)
-  static const String serverIp = "192.168.100.13"; 
-  static const String port = "8000";
+  static const String serverIp = "appmobile-production.up.railway.app"; 
+  static const String port = "443";
 
   // --- BASE PARA MEDIOS Y API ---
-  static const String serverBase = "http://$serverIp:$port";
+  static const String serverBase = "https://$serverIp";
   static const String baseUrl = "$serverBase/api";
 
   // --- ENDPOINTS ---
