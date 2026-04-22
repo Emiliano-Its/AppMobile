@@ -149,7 +149,7 @@ if CLOUDINARY_STORAGE['CLOUD_NAME']:
             "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
         },
     }
-    MEDIA_URL = f"https://res.cloudinary.com/{CLOUDINARY_STORAGE['CLOUD_NAME']}/image/upload/"
+    MEDIA_URL = '/media/'
 else:
     STORAGES = {
         "default": {

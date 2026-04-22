@@ -23,16 +23,13 @@ class FinalProductSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         request = self.context.get('request')
         if request:
-            # CASO 1: Flutter quiere borrar la imagen
             if 'imagen' in request.data and request.data['imagen'] == '':
                 if instance.imagen:
                     instance.imagen.delete(save=False)
                 instance.imagen = None
-            # CASO 2: No viene imagen nueva, mantener la actual
+                validated_data.pop('imagen', None)
             elif 'imagen' not in request.FILES:
                 validated_data.pop('imagen', None)
-        validated_data.pop('imagen', None)
-        instance.save()
         return super().update(instance, validated_data)
 
 
