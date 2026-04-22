@@ -11,22 +11,28 @@ class FinalProductSerializer(serializers.ModelSerializer):
         fields = ['id', 'codigo_barras', 'nombre', 'precio_venta', 'stock_actual', 'activo', 'imagen', 'imagen_url']
 
     def get_imagen_url(self, obj):
-        if not obj.imagen:
+        if not obj.imagen or not obj.imagen.name:
             return None
-        name = obj.imagen.name or ''
-        if not name:
-            return None
+        name = obj.imagen.name
         if 'image/upload/' in name:
             name = name.split('image/upload/')[-1]
         if name.startswith('http'):
-            return name
-        cloud_name = "dfaqoztrp"
-        return f"https://res.cloudinary.com/{cloud_name}/image/upload/{name}"
+            return name.replace('https:/res', 'https://res')
+        return f"https://res.cloudinary.com/dfaqoztrp/image/upload/{name}"
 
     def update(self, instance, validated_data):
         request = self.context.get('request')
-        if request is None or 'imagen' not in request.FILES:
-            validated_data.pop('imagen', None)
+        if request:
+            # CASO 1: Flutter quiere borrar la imagen
+            if 'imagen' in request.data and request.data['imagen'] == '':
+                if instance.imagen:
+                    instance.imagen.delete(save=False)
+                instance.imagen = None
+            # CASO 2: No viene imagen nueva, mantener la actual
+            elif 'imagen' not in request.FILES:
+                validated_data.pop('imagen', None)
+        validated_data.pop('imagen', None)
+        instance.save()
         return super().update(instance, validated_data)
 
 
@@ -66,13 +72,11 @@ class SaleSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         details_data = validated_data.pop('detalles', [])
         sale = Venta.objects.create(**validated_data)
-
         for detail in details_data:
             product = detail.get('producto')
             qty = detail.get('cantidad')
             price = detail.get('precio_unitario')
             DetalleVenta.objects.create(venta=sale, producto=product, cantidad=qty, precio_unitario=price)
-
             if sale.tipo == 'LOCAL':
                 product.stock_actual -= int(qty)
                 if product.stock_actual < 0:
@@ -80,5 +84,4 @@ class SaleSerializer(serializers.ModelSerializer):
                 if product.stock_actual == 0:
                     product.activo = False
                 product.save()
-
         return sale
