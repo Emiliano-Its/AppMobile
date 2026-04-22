@@ -28,7 +28,9 @@ class _CustomerPedidosState extends State<CustomerPedidos> {
 
   Future<void> _loadArchivados() async {
     final prefs = await SharedPreferences.getInstance();
-    final List<String> guardados = prefs.getStringList('pedidos_archivados') ?? [];
+    final int userId = prefs.getInt('user_id') ?? 0;
+    final key = 'uid_${userId}__pedidos_archivados';
+    final List<String> guardados = prefs.getStringList(key) ?? [];
     setState(() {
       _archivados.addAll(guardados.map((e) => int.tryParse(e) ?? -1).where((e) => e != -1));
     });
@@ -36,7 +38,9 @@ class _CustomerPedidosState extends State<CustomerPedidos> {
 
   Future<void> _saveArchivados() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('pedidos_archivados', _archivados.map((e) => e.toString()).toList());
+    final int userId = prefs.getInt('user_id') ?? 0;
+    final key = 'uid_${userId}__pedidos_archivados';
+    await prefs.setStringList(key, _archivados.map((e) => e.toString()).toList());
   }
 
 Future<void> _fetchMisPedidos() async {

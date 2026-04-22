@@ -45,7 +45,7 @@ class _MainWrapperState extends State<MainWrapper> {
 
       // Cada rol arranca en su tab principal
       if (rol == 'ADMIN') {
-        _currentIndex = 3; // Panel de control (admin_home)
+        _currentIndex = 0; // Stats (primera pantalla)
       } else if (rol == 'STAFF') {
         _currentIndex = 0; // Ventas
       } else {

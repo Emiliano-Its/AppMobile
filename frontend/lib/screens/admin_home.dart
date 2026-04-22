@@ -222,7 +222,7 @@ class _AdminInventoryHubState extends State<AdminInventoryHub> {
       height: 60,
       child: OutlinedButton.icon(
         icon: const Icon(Icons.logout_rounded, size: 24),
-        label: const Text("CERRAR SESIÓN SEGURA", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1)),
+        label: const Text("CERRAR SESIÓN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1)),
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.red.shade700,
           side: BorderSide(color: Colors.red.shade300, width: 1.5),

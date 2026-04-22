@@ -51,12 +51,12 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
   // Carga las coordenadas guardadas previamente por el cliente
   Future<void> _loadStoredLocation() async {
     final prefs = await SharedPreferences.getInstance();
-    double? lat = prefs.getDouble('last_lat');
-    double? lng = prefs.getDouble('last_lng');
+    final int userId = prefs.getInt('user_id') ?? 0;
+    final String prefix = userId > 0 ? 'uid_${userId}__' : '';
+    double? lat = prefs.getDouble('${prefix}last_lat');
+    double? lng = prefs.getDouble('${prefix}last_lng');
     if (lat != null && lng != null) {
-      setState(() {
-        _selectedLocation = LatLng(lat, lng);
-      });
+      setState(() { _selectedLocation = LatLng(lat, lng); });
     }
   }
 

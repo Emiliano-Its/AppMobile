@@ -33,7 +33,13 @@ class _FinalProductsScreenState extends State<FinalProductsScreen> {
   // --- ESCANEAR PARA SUMAR (CORREGIDO CON FILTRO DE ESTABILIDAD) ---
 Future<void> _abrirEscanerParaSumar() async {
   final MobileScannerController scannerController = MobileScannerController(
-    formats: [BarcodeFormat.ean13, BarcodeFormat.ean8],
+    formats: [
+      BarcodeFormat.ean13,
+      BarcodeFormat.ean8,
+      BarcodeFormat.code128,
+      BarcodeFormat.code39,
+      BarcodeFormat.qrCode,
+    ],
     detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
     torchEnabled: false,
@@ -56,12 +62,9 @@ Future<void> _abrirEscanerParaSumar() async {
                 final List<Barcode> barcodes = capture.barcodes;
                 for (final barcode in barcodes) {
                   final String? rawValue = barcode.rawValue;
-                  if (rawValue != null && (rawValue.length == 13 || rawValue.length == 8)) {
-                    if (RegExp(r'^[0-9]+$').hasMatch(rawValue)) {
-                      // Solo pop, dispose se hace después del await
-                      Navigator.pop(context, rawValue);
-                      break;
-                    }
+                  if (rawValue != null && rawValue.isNotEmpty) {
+                    Navigator.pop(context, rawValue);
+                    break;
                   }
                 }
               },

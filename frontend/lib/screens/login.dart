@@ -59,9 +59,10 @@ class _LoginScreenState extends State<LoginScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('username', username);
         await prefs.setString('user_rol', rol);
-        
-        // ESTA LÍNEA ES LA QUE PERMITE QUE EL CAMBIO DE CONTRASEÑA NO MARQUE 401
         await prefs.setString('access_token', token);
+        // Guardamos el ID para usarlo como prefijo estable (no cambia aunque cambie el username)
+        final int userId = userData['id'] ?? 0;
+        await prefs.setInt('user_id', userId);
 
         if (!mounted) return;
         

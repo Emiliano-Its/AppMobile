@@ -53,18 +53,14 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
   // ... (El resto de la lógica de filtrado y cálculo se mantiene igual) ...
   List<dynamic> get _filteredSales {
     return _allSales.where((sale) {
-      // Usamos fecha_cobro (día real del pago) si existe,
-      // de lo contrario usamos fecha (para ventas de mostrador antiguas sin fecha_cobro)
-      final String? fechaStr = sale['fecha_cobro'] ?? sale['fecha'];
-      if (fechaStr == null) return false;
-
-      // Convertimos a hora local para comparar y mostrar correctamente
-      final DateTime saleDate = DateTime.parse(fechaStr).toLocal();
-
+      // Usamos fecha_cobro si existe (ventas cobradas), sino fecha (ventas antiguas)
+      final String rawDate = sale['fecha_cobro'] ?? sale['fecha'];
+      DateTime saleDate = DateTime.parse(rawDate).toLocal();
       return saleDate.year == _selectedDate.year &&
              saleDate.month == _selectedDate.month &&
              saleDate.day == _selectedDate.day &&
-             sale['tipo'] == 'LOCAL';
+             sale['tipo'] == 'LOCAL' &&
+             sale['estado'] == 'ENTREGADO';
     }).toList();
   }
 
@@ -197,11 +193,8 @@ class _CorteCajaScreenState extends State<CorteCajaScreen> {
               ),
             ),
             title: Text(s['cliente_nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(
-              DateFormat('hh:mm a').format(
-                DateTime.parse(s['fecha_cobro'] ?? s['fecha']).toLocal(),
-              ),
-            ),
+            subtitle: Text(DateFormat('hh:mm a').format(
+              DateTime.parse(s['fecha_cobro'] ?? s['fecha']).toLocal())),
             trailing: Text("\$${s['total']}", 
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.verdeBosque)),
           ),

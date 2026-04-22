@@ -31,11 +31,19 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     _fetchProducts();
   }
 
+  String _currentUser = '';
+
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    final String rol = prefs.getString('user_rol') ?? "";
+    final String rol = prefs.getString('user_rol') ?? '';
+    final String nuevoUser = prefs.getString('username') ?? 'Cliente';
     setState(() {
-      _userName = prefs.getString('username') ?? "Cliente";
+      // Si cambió el usuario, limpiar el carrito
+      if (_currentUser.isNotEmpty && _currentUser != nuevoUser) {
+        _cart.clear();
+      }
+      _currentUser = nuevoUser;
+      _userName = nuevoUser;
       _isAdmin = (rol == 'ADMIN' || rol == 'STAFF');
     });
   }
@@ -103,8 +111,10 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   void _navigateToCart() async {
     final prefs = await SharedPreferences.getInstance();
-    String direccion = prefs.getString('default_address') ?? '';
-    String telefono = prefs.getString('default_phone') ?? '';
+    final int userId = prefs.getInt('user_id') ?? 0;
+    final prefix = userId > 0 ? 'uid_${userId}__' : '';
+    String direccion = prefs.getString('${prefix}default_address') ?? '';
+    String telefono  = prefs.getString('${prefix}default_phone') ?? '';
 
     if (!mounted) return;
 

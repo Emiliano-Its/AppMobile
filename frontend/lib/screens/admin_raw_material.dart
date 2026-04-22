@@ -114,6 +114,13 @@ class _RawMaterialScreenState extends State<RawMaterialScreen> {
 
   void _openScanner(bool isEntrada) async {
     final MobileScannerController ctrl = MobileScannerController(
+      formats: [
+        BarcodeFormat.ean13,
+        BarcodeFormat.ean8,
+        BarcodeFormat.code128,
+        BarcodeFormat.code39,
+        BarcodeFormat.qrCode,
+      ],
       detectionSpeed: DetectionSpeed.normal,
       facing: CameraFacing.back,
     );

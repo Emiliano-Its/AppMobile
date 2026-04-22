@@ -61,22 +61,24 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
     }
   }
 
+  // Prefija la clave con el username para aislar datos entre cuentas
+  String _key(String k) => '${_userName}__$k';
+
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _userName = prefs.getString('username') ?? "Usuario";
       _userEmail = prefs.getString('email') ?? "";
-      _direccionController.text = prefs.getString('default_address') ?? '';
-      _telefonoController.text = prefs.getString('default_phone') ?? '';
+      _direccionController.text = prefs.getString(_key('default_address')) ?? '';
+      _telefonoController.text  = prefs.getString(_key('default_phone')) ?? '';
 
-      double? lat = prefs.getDouble('last_lat');
-      double? lng = prefs.getDouble('last_lng');
+      double? lat = prefs.getDouble(_key('last_lat'));
+      double? lng = prefs.getDouble(_key('last_lng'));
       if (lat != null && lng != null) {
         _selectedLocation = LatLng(lat, lng);
       }
     });
 
-    // Si no hay datos locales, los pedimos al servidor
     if (_direccionController.text.isEmpty && _telefonoController.text.isEmpty) {
       await _loadProfileFromServer();
     }
@@ -106,11 +108,10 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
             if (tel.isNotEmpty) _telefonoController.text = tel;
             if (lat != null && lng != null) _selectedLocation = LatLng(lat, lng);
           });
-          // Guardar localmente para la próxima vez
-          await prefs.setString('default_address', dir);
-          await prefs.setString('default_phone', tel);
-          if (lat != null) await prefs.setDouble('last_lat', lat);
-          if (lng != null) await prefs.setDouble('last_lng', lng);
+          await prefs.setString(_key('default_address'), dir);
+          await prefs.setString(_key('default_phone'), tel);
+          if (lat != null) await prefs.setDouble(_key('last_lat'), lat);
+          if (lng != null) await prefs.setDouble(_key('last_lng'), lng);
         }
       }
     } catch (e) {
@@ -124,23 +125,20 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
 
     final response = await http.post(
       Uri.parse(ApiConfig.userProfile),
-      headers: {
-        ...ApiConfig.headers,
-        'Authorization': 'Token $token',
-      },
+      headers: {...ApiConfig.headers, 'Authorization': 'Token $token'},
       body: jsonEncode({
         'default_address': _direccionController.text,
-        'default_phone': _telefonoController.text,
-        'last_lat': _selectedLocation.latitude,
-        'last_lng': _selectedLocation.longitude,
+        'default_phone':   _telefonoController.text,
+        'last_lat':        _selectedLocation.latitude,
+        'last_lng':        _selectedLocation.longitude,
       }),
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      await prefs.setString('default_address', _direccionController.text);
-      await prefs.setString('default_phone', _telefonoController.text);
-      await prefs.setDouble('last_lat', _selectedLocation.latitude);
-      await prefs.setDouble('last_lng', _selectedLocation.longitude);
+      await prefs.setString(_key('default_address'), _direccionController.text);
+      await prefs.setString(_key('default_phone'),   _telefonoController.text);
+      await prefs.setDouble(_key('last_lat'),  _selectedLocation.latitude);
+      await prefs.setDouble(_key('last_lng'),  _selectedLocation.longitude);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
