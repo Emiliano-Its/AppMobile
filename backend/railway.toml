@@ -2,5 +2,5 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python manage.py migrate && gunicorn myapp.wsgi --bind 0.0.0.0:$PORT"
-healthcheckPath = "/admin/"
+startCommand = "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn myapp.wsgi --bind 0.0.0.0:$PORT"
+healthcheckPath = "/api/users/login/"
