@@ -107,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const Icon(Icons.bakery_dining_rounded, size: 90, color: AppColors.verdeBosque),
               const SizedBox(height: 15),
               const Text(
-                "Tostadería el Molino", 
+                "Tostadería 20 de Noviembre", 
                 style: TextStyle(fontSize: 26, color: AppColors.verdeBosque, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 50),
