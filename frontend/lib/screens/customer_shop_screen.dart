@@ -158,7 +158,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "Tostadería 20 de Noviembre",
+              "Tostadería",
               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
             ),
             Text(
